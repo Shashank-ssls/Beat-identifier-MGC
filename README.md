@@ -1,5 +1,6 @@
 # 🎵 Music Genre Classification — Benchmark + MLOps
 
+[![CI](https://github.com/Shashank-ssls/Beat-identifier-MGC/actions/workflows/ci.yml/badge.svg)](https://github.com/Shashank-ssls/Beat-identifier-MGC/actions/workflows/ci.yml)
 ![Python](https://img.shields.io/badge/python-3.12-blue)
 ![License: MIT](https://img.shields.io/badge/license-MIT-green)
 ![Lint: ruff](https://img.shields.io/badge/lint-ruff-orange)
@@ -104,7 +105,7 @@ python -m src.features.extract_embeddings  && python -m src.training.train_embed
 ## Repo structure
 
 ```
-music-genre-classification/
+Beat-identifier-MGC/
 ├── data/                  # gitignored; raw audio + cached features
 ├── src/
 │   ├── data/              # validation, splitting, loaders        (Phase 1)
