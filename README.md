@@ -138,23 +138,33 @@ To serve the CNN instead, set `model.kind: cnn` in `configs/serving.yaml`.
 
 ## Results
 
-Held-out **test set** (150 clips). Full comparison (incl. CNN + latency) lands
-in Phase 5; classic-path numbers so far:
+Held-out **test set** (150 clips), ranked by macro-F1:
 
 | Model | Test accuracy | Test macro-F1 | Latency (ms/clip, CPU) |
 |---|---|---|---|
-| **SVM (RBF)** | **0.807** | **0.807** | **0.24** |
+| SVM — 3s segments + tuned (GroupKFold) | 0.813 | 0.813 | 6.2 |
+| **SVM (RBF), 30s** | **0.807** | **0.807** | **0.24** |
 | XGBoost | 0.713 | 0.714 | 1.03 |
 | CNN (from-scratch, GTX 1650) | 0.693 | 0.668 | 19.4 |
 
-**Finding:** classic ML on hand-crafted librosa features **beats** the small
-from-scratch CNN on GTZAN — a known result on this dataset, and a good talking
-point about when deep learning is worth the cost. The CNN trains in ~21 epochs
-(early-stopped) on a 4GB GTX 1650 with mixed precision; more tuning (LR schedule,
-heavier augmentation) would close the gap but the benchmark story holds. The SVM is both the most
-accurate **and** ~80x cheaper to serve. Full per-class F1 table:
-`reports/comparison.csv`; analysis in `notebooks/03_results_analysis.ipynb`.
+**Finding 1 — classic ML beats the from-scratch CNN on GTZAN.** Hand-crafted
+features carry most of the genre signal; with ~700 training clips a small CNN
+can't out-learn them, and the SVM is also ~80x cheaper to serve. (CNN trains in
+~21 early-stopped epochs on a 4GB GTX 1650 with AMP; LR scheduling / heavier
+augmentation would narrow but not close the gap.)
 
-Reproduce: `python -m src.training.train_classic` and
-`python -m src.training.train_cnn --device cuda` (both log to `./mlruns`; view
+**Finding 2 — "3-second segmentation" gives no real gain when done without
+leakage.** Splitting each clip into 3s windows (~10x rows) + soft-voting is the
+classic trick behind the ~90% GTZAN figures online — but those use a *random*
+segment split that leaks segments of the same recording across train/test. With
+a **track-grouped** split + GroupKFold tuning, the honest gain is ~0 (0.807 →
+0.813): voting over segments ≈ averaging features over the full clip. The
+inflated 90% is largely a leakage artifact.
+
+Full per-class F1 table: `reports/comparison.csv`; analysis in
+`notebooks/03_results_analysis.ipynb`.
+
+Reproduce: `python -m src.training.train_classic`,
+`python -m src.features.extract_segments && python -m src.training.train_classic_segmented`,
+and `python -m src.training.train_cnn --device cuda` (all log to `./mlruns`; view
 with `mlflow ui --backend-store-uri ./mlruns`).

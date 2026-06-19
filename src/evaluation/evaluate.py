@@ -70,6 +70,42 @@ def eval_classic(name: str, class_names: list[str]) -> dict | None:
     return metrics
 
 
+def eval_segmented(class_names: list[str]) -> dict | None:
+    """Evaluate the 3s-segment SVM at clip level (average segment probabilities)."""
+    path = MODELS_DIR / "classic_svm_segmented.joblib"
+    fcfg = load_config("features")
+    table = PROJECT_ROOT / fcfg["classic"]["segment_cache_path"]
+    if not (path.exists() and table.exists()):
+        return None
+
+    from src.evaluation.aggregate import aggregate_proba_by_clip
+
+    model = joblib.load(path)
+    df = pd.read_parquet(table)
+    test = df[df["split"] == "test"]
+    cols = feature_names(fcfg["classic"])
+
+    proba = model.predict_proba(test[cols].to_numpy())
+    _, clip_proba, clip_true = aggregate_proba_by_clip(
+        test["clip_id"].to_numpy(), proba, test["label_idx"].to_numpy()
+    )
+    clip_pred = clip_proba.argmax(1)
+    metrics = compute_metrics(clip_true, clip_pred, class_names)
+
+    # latency: per-clip = predict on its segments + average (model-only).
+    clip_ids = list(dict.fromkeys(test["clip_id"]))
+    Xc = {c: test[test.clip_id == c][cols].to_numpy() for c in clip_ids}
+    model.predict_proba(Xc[clip_ids[0]])
+    t0 = time.perf_counter()
+    for c in clip_ids:
+        model.predict_proba(Xc[c]).mean(axis=0)
+    metrics["latency_ms"] = (time.perf_counter() - t0) / len(clip_ids) * 1000
+    save_confusion_matrix(clip_true, clip_pred, class_names,
+                          REPORTS_DIR / "cm_svm_segmented.png",
+                          title="SVM (3s segments) — test confusion matrix")
+    return metrics
+
+
 def eval_cnn(class_names: list[str]) -> dict | None:
     weights = MODELS_DIR / "cnn.pt"
     arch = MODELS_DIR / "cnn_arch.json"
@@ -135,6 +171,9 @@ def main() -> None:
         m = eval_classic(name, class_names)
         if m:
             results[name] = m
+    seg = eval_segmented(class_names)
+    if seg:
+        results["svm_3s"] = seg
     cnn = eval_cnn(class_names)
     if cnn:
         results["cnn"] = cnn

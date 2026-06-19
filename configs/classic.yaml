@@ -20,3 +20,11 @@ svm:
 
 mlflow:
   experiment_name: genre-classic
+
+# Hyperparameter sweep for the segmented SVM (GroupKFold grid search, grouped by
+# clip so CV folds never split a clip's segments across train/val).
+svm_sweep:
+  cv_folds: 3
+  param_grid:
+    clf__C: [1, 5, 10, 30, 100]
+    clf__gamma: [scale, 0.01, 0.001]

@@ -41,6 +41,10 @@ class Predictor:
         self.sample_rate = dcfg["dataset"]["sample_rate"]
         self.fcfg = load_config("features")
 
+        # Optional: if set, the classic model was trained on N-second segments,
+        # so at serving time we segment the upload and average segment probs.
+        self.segment_seconds = scfg.get("segment_seconds")
+
         if self.kind == "classic":
             import joblib
 
@@ -82,10 +86,24 @@ class Predictor:
     def _predict_classic(self, y: np.ndarray) -> np.ndarray:
         from src.features.classic_features import extract_classic_features, feature_names
 
-        feats = extract_classic_features(y, self.sample_rate, self.fcfg["classic"])
-        vec = np.array([feats[n] for n in feature_names(self.fcfg["classic"])]).reshape(1, -1)
+        names = feature_names(self.fcfg["classic"])
+
+        def vec_of(sig: np.ndarray) -> np.ndarray:
+            feats = extract_classic_features(sig, self.sample_rate, self.fcfg["classic"])
+            return np.array([feats[n] for n in names])
+
+        if self.segment_seconds:
+            # Segment the clip, predict each window, average (soft voting) —
+            # mirrors how the segmented model was trained/evaluated.
+            from src.features.extract_segments import segment_waveform
+
+            seg_len = int(self.segment_seconds * self.sample_rate)
+            segs = segment_waveform(y, seg_len) or [y]  # fall back to whole clip
+            X = np.vstack([vec_of(s) for s in segs])
+            return self.model.predict_proba(X).mean(axis=0)
+
         # Pipeline ends in a probability-capable estimator (SVC(probability=True)/XGB).
-        return self.model.predict_proba(vec)[0]
+        return self.model.predict_proba(vec_of(y).reshape(1, -1))[0]
 
     def _predict_cnn(self, y: np.ndarray) -> np.ndarray:
         import torch
