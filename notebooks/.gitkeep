@@ -1,0 +1,3 @@
+# Notebooks added in later phases:
+#   01_eda.ipynb              - class balance, sample waveforms/spectrograms (Phase 1)
+#   02_results_analysis.ipynb - classic-vs-CNN comparison writeup (Phase 5)

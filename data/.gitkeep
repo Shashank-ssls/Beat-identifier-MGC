@@ -1,0 +1,2 @@
+# Raw audio and extracted features live here but are gitignored.
+# See scripts/ (added in Phase 1) for the GTZAN download fallback.

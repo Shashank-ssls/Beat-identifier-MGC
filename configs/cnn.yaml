@@ -1,0 +1,28 @@
+# CNN training config (Phase 4).
+# Small from-scratch CNN on mel-spectrograms. Dual-target hardware design:
+# batch_size <= 16 so it also runs on a local GTX 1650 (4GB); bump to 32 on Kaggle.
+
+seed: 42
+
+model:
+  conv_blocks: 4               # keep small (4-5) — this is the benchmark point
+  base_channels: 16            # channels in first block; doubles each block
+  dropout: 0.3
+  num_classes: 10
+
+training:
+  batch_size: 16               # 4GB-safe; raise to 32 on Kaggle's 16GB GPU
+  epochs: 60
+  learning_rate: 0.001
+  weight_decay: 0.0001
+  optimizer: adamw
+  amp: true                    # torch.cuda.amp mixed precision
+  early_stopping_patience: 10  # epochs without val-improvement before stopping
+
+augmentation:                  # light SpecAugment-style masking
+  enabled: true
+  time_mask_param: 30
+  freq_mask_param: 15
+
+mlflow:
+  experiment_name: genre-cnn

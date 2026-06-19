@@ -1,0 +1,34 @@
+# Data layer config (Phase 1).
+# Controls dataset location, the corrupt-file handling, and the reproducible split.
+
+seed: 42                       # fixed seed used EVERYWHERE for reproducibility
+
+dataset:
+  name: gtzan
+  genres:                      # 10 GTZAN classes (alphabetical = label index order)
+    - blues
+    - classical
+    - country
+    - disco
+    - hiphop
+    - jazz
+    - metal
+    - pop
+    - reggae
+    - rock
+  sample_rate: 22050           # GTZAN native sr; librosa default
+  clip_seconds: 30
+  # Local fallback path (gitignored). On Kaggle this points at the attached
+  # dataset, e.g. /kaggle/input/gtzan-dataset-music-genre-classification/...
+  audio_dir: data/genres_original
+
+corrupt_files:                 # known-bad GTZAN files to drop during validation
+  - jazz.00054                 # truncated/corrupt header — documented GTZAN flaw
+
+split:
+  # Split BEFORE feature extraction to avoid leakage (see README caveat).
+  train: 0.70
+  val: 0.15
+  test: 0.15
+  stratified: true
+  manifest_path: data/split_manifest.csv   # committed so splits are reproducible

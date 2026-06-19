@@ -1,0 +1,48 @@
+# ── Data & model artifacts (never commit raw audio or weights) ────────
+# Use data/* (not data/) so git still descends into the folder and the
+# negations below can re-include the few small files we DO want tracked.
+data/*
+!data/.gitkeep
+# the reproducible split IS committed (see Phase 1)
+!data/split_manifest.csv
+*.wav
+*.mp3
+*.au
+*.npy
+*.npz
+*.pt
+*.pth
+*.pkl
+*.joblib
+
+# ── MLflow local tracking store ───────────────────────────────────────
+mlruns/
+mlartifacts/
+
+# ── Caches ────────────────────────────────────────────────────────────
+.cache/
+features_cache/
+
+# ── Python ────────────────────────────────────────────────────────────
+__pycache__/
+*.py[cod]
+*.egg-info/
+.eggs/
+build/
+dist/
+.pytest_cache/
+.ruff_cache/
+
+# ── Virtual environments ──────────────────────────────────────────────
+.venv/
+venv/
+env/
+
+# ── Notebooks ─────────────────────────────────────────────────────────
+.ipynb_checkpoints/
+
+# ── IDE / OS ──────────────────────────────────────────────────────────
+.vscode/
+.idea/
+.DS_Store
+Thumbs.db

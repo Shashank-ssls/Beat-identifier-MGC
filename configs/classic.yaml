@@ -1,0 +1,22 @@
+# Classic-ML training config (Phase 3).
+# XGBoost and SVM trained on the StandardScaler'd librosa feature table.
+
+seed: 42
+
+xgboost:
+  n_estimators: 400
+  max_depth: 6
+  learning_rate: 0.05
+  subsample: 0.9
+  colsample_bytree: 0.9
+  objective: multi:softprob    # probabilities over 10 genres
+  tree_method: hist
+
+svm:
+  kernel: rbf
+  C: 10.0
+  gamma: scale
+  probability: true            # needed for confidence + log-loss
+
+mlflow:
+  experiment_name: genre-classic

@@ -1,0 +1,36 @@
+# ── Core scientific stack ─────────────────────────────────────────────
+numpy==1.26.4
+pandas==2.2.2
+scipy==1.13.1
+pyyaml==6.0.2
+
+# ── Audio / DSP ───────────────────────────────────────────────────────
+librosa==0.10.2.post1
+soundfile==0.12.1
+audioread==3.0.1
+
+# ── Classic ML ────────────────────────────────────────────────────────
+scikit-learn==1.5.1
+xgboost==2.1.1
+
+# ── Deep learning (CPU/GPU build resolved by the install env) ─────────
+# On Kaggle a CUDA build is preinstalled; locally install the build that
+# matches your CUDA. See README for the GTX 1650 install note.
+torch==2.3.1
+torchaudio==2.3.1
+
+# ── Experiment tracking ───────────────────────────────────────────────
+mlflow==2.14.3
+
+# ── Serving ───────────────────────────────────────────────────────────
+fastapi==0.111.1
+uvicorn[standard]==0.30.3
+python-multipart==0.0.9
+
+# ── Plotting (EDA, confusion matrices) ────────────────────────────────
+matplotlib==3.9.1
+seaborn==0.13.2
+
+# ── Dev / test / lint ─────────────────────────────────────────────────
+pytest==8.3.2
+ruff==0.5.5
