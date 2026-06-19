@@ -106,6 +106,32 @@ def eval_segmented(class_names: list[str]) -> dict | None:
     return metrics
 
 
+def eval_embeddings(class_names: list[str]) -> dict | None:
+    """Evaluate the PANNs-embedding linear probe (one embedding per clip)."""
+    path = MODELS_DIR / "embeddings_logreg.joblib"
+    table = PROJECT_ROOT / load_config("embeddings")["panns"]["cache_path"]
+    if not (path.exists() and table.exists()):
+        return None
+
+    model = joblib.load(path)
+    df = pd.read_parquet(table)
+    test = df[df["split"] == "test"]
+    cols = [c for c in df.columns if c.startswith("emb_")]
+    X, y = test[cols].to_numpy(), test["label_idx"].to_numpy()
+
+    y_pred = model.predict(X)
+    metrics = compute_metrics(y, y_pred, class_names)
+
+    model.predict(X[:1])
+    t0 = time.perf_counter()
+    for i in range(len(X)):
+        model.predict(X[i : i + 1])
+    metrics["latency_ms"] = (time.perf_counter() - t0) / len(X) * 1000
+    save_confusion_matrix(y, y_pred, class_names, REPORTS_DIR / "cm_panns_logreg.png",
+                          title="PANNs + logreg — test confusion matrix")
+    return metrics
+
+
 def eval_cnn(class_names: list[str]) -> dict | None:
     weights = MODELS_DIR / "cnn.pt"
     arch = MODELS_DIR / "cnn_arch.json"
@@ -174,6 +200,9 @@ def main() -> None:
     seg = eval_segmented(class_names)
     if seg:
         results["svm_3s"] = seg
+    emb = eval_embeddings(class_names)
+    if emb:
+        results["panns_logreg"] = emb
     cnn = eval_cnn(class_names)
     if cnn:
         results["cnn"] = cnn

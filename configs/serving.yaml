@@ -2,12 +2,17 @@
 # Default = SVM, the benchmark winner (best macro-F1, lowest latency).
 
 model:
-  kind: classic        # classic | cnn
-  name: svm            # classic: svm | xgboost   (ignored for cnn)
+  # kind = classic | cnn | embeddings
+  # Default = classic/svm: best accuracy-per-millisecond and a light container.
+  # Set kind: embeddings for the most accurate model (PANNs + linear probe,
+  # 0.873) — but that loads the ~330MB CNN14 checkpoint and is much heavier.
+  kind: classic
+  name: svm            # classic: svm | xgboost   (ignored for cnn/embeddings)
   # Paths are relative to the repo root.
   classic_path: models/classic_svm.joblib
   cnn_weights: models/cnn.pt
   cnn_arch: models/cnn_arch.json
+  embeddings_path: models/embeddings_logreg.joblib
 
 api:
   title: Music Genre Classifier

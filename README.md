@@ -140,18 +140,26 @@ To serve the CNN instead, set `model.kind: cnn` in `configs/serving.yaml`.
 
 Held-out **test set** (150 clips), ranked by macro-F1:
 
-| Model | Test accuracy | Test macro-F1 | Latency (ms/clip, CPU) |
+| Model | Test accuracy | Test macro-F1 | Classifier latency (ms/clip) |
 |---|---|---|---|
-| SVM — 3s segments + tuned (GroupKFold) | 0.813 | 0.813 | 6.2 |
-| **SVM (RBF), 30s** | **0.807** | **0.807** | **0.24** |
+| **PANNs CNN14 embeddings + linear probe** | **0.873** | **0.873** | 0.27* |
+| SVM — 3s segments + tuned (GroupKFold) | 0.813 | 0.813 | 6.5 |
+| SVM (RBF), 30s | 0.807 | 0.807 | 0.24 |
 | XGBoost | 0.713 | 0.714 | 1.03 |
-| CNN (from-scratch, GTX 1650) | 0.693 | 0.668 | 19.4 |
+| CNN (from-scratch, GTX 1650) | 0.693 | 0.668 | 22.1 |
 
-**Finding 1 — classic ML beats the from-scratch CNN on GTZAN.** Hand-crafted
-features carry most of the genre signal; with ~700 training clips a small CNN
-can't out-learn them, and the SVM is also ~80x cheaper to serve. (CNN trains in
-~21 early-stopped epochs on a 4GB GTX 1650 with AMP; LR scheduling / heavier
-augmentation would narrow but not close the gap.)
+\* The probe itself is sub-ms, but the PANNs model serves only *after* a CNN14
+forward pass to produce the embedding (~tens of ms on CPU) — so its real
+end-to-end latency is much higher than the SVM's. Accuracy vs serving-cost is the
+trade-off.
+
+**Finding 1 — transfer learning wins; from-scratch CNN loses.** A linear probe
+on frozen **PANNs CNN14** embeddings (pretrained on AudioSet) tops the board at
+**0.873** — the only thing that breaks past the hand-feature ceiling. Meanwhile
+the *from-scratch* CNN (0.693) loses to even the hand-feature SVM (0.807):
+with ~700 training clips a small CNN can't out-learn hand features, but a model
+pretrained on millions of clips can. That contrast is the core lesson — *when
+you have little data, borrow features from a big pretrained model.*
 
 **Finding 2 — "3-second segmentation" gives no real gain when done without
 leakage.** Splitting each clip into 3s windows (~10x rows) + soft-voting is the
@@ -166,5 +174,6 @@ Full per-class F1 table: `reports/comparison.csv`; analysis in
 
 Reproduce: `python -m src.training.train_classic`,
 `python -m src.features.extract_segments && python -m src.training.train_classic_segmented`,
+`python -m src.features.extract_embeddings && python -m src.training.train_embeddings`,
 and `python -m src.training.train_cnn --device cuda` (all log to `./mlruns`; view
 with `mlflow ui --backend-store-uri ./mlruns`).

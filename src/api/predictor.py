@@ -62,6 +62,15 @@ class Predictor:
             )
             self.model.eval()
             self.name = "cnn"
+        elif self.kind == "embeddings":
+            # PANNs CNN14 backbone (frozen) + a linear probe. Most accurate, but
+            # heaviest to serve (loads the ~330MB checkpoint).
+            import joblib
+
+            self.model = joblib.load(PROJECT_ROOT / scfg["embeddings_path"])
+            self.ecfg = load_config("embeddings")["panns"]
+            self._tagger = None  # lazily loaded on first request
+            self.name = "panns_logreg"
         else:
             raise ValueError(f"unknown model kind: {self.kind!r}")
 
@@ -73,6 +82,8 @@ class Predictor:
         """Decoded mono waveform (at self.sample_rate) → Prediction."""
         if self.kind == "classic":
             probs = self._predict_classic(y)
+        elif self.kind == "embeddings":
+            probs = self._predict_embeddings(y)
         else:
             probs = self._predict_cnn(y)
 
@@ -104,6 +115,21 @@ class Predictor:
 
         # Pipeline ends in a probability-capable estimator (SVC(probability=True)/XGB).
         return self.model.predict_proba(vec_of(y).reshape(1, -1))[0]
+
+    def _predict_embeddings(self, y: np.ndarray) -> np.ndarray:
+        import librosa
+        from panns_inference import AudioTagging
+
+        if self._tagger is None:  # load the heavy backbone once, on first call
+            self._tagger = AudioTagging(
+                checkpoint_path=str(PROJECT_ROOT / self.ecfg["checkpoint_path"]),
+                device="cpu",
+            )
+        # PANNs wants 32 kHz; resample if the upload was decoded at another rate.
+        if self.sample_rate != self.ecfg["sample_rate"]:
+            y = librosa.resample(y, orig_sr=self.sample_rate, target_sr=self.ecfg["sample_rate"])
+        _, emb = self._tagger.inference(y[None, :])
+        return self.model.predict_proba(np.asarray(emb).reshape(1, -1))[0]
 
     def _predict_cnn(self, y: np.ndarray) -> np.ndarray:
         import torch

@@ -1,0 +1,19 @@
+# Pretrained-embedding path config.
+# Uses PANNs CNN14 (pretrained on Google AudioSet) as a frozen feature
+# extractor, then a simple linear classifier ("linear probe") on top.
+
+seed: 42
+
+panns:
+  sample_rate: 32000           # PANNs CNN14 expects 32 kHz audio
+  embedding_dim: 2048
+  # Checkpoint kept on F: (not C:) — downloaded once on first run (~340 MB).
+  checkpoint_path: models/panns_cnn14.pth
+  cache_path: features_cache/panns_embeddings.parquet
+
+classifier:                    # linear probe on the frozen embeddings
+  C: 1.0
+  max_iter: 2000
+
+mlflow:
+  experiment_name: genre-embeddings

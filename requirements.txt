@@ -19,6 +19,12 @@ xgboost==2.1.1
 torch==2.3.1
 torchaudio==2.3.1
 
+# ── Pretrained audio embeddings (transfer-learning path) ──────────────
+# PANNs CNN14 backbone. Note: panns_inference downloads its checkpoint via
+# `wget`; on Windows fetch it manually (see README) — we point it at models/.
+panns-inference==0.1.1
+torchlibrosa==0.1.0
+
 # ── Experiment tracking ───────────────────────────────────────────────
 mlflow==2.14.3
 
