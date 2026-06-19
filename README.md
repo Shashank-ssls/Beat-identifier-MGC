@@ -124,9 +124,17 @@ in Phase 5; classic-path numbers so far:
 
 | Model | Test accuracy | Test macro-F1 |
 |---|---|---|
-| XGBoost | 0.713 | 0.714 |
 | **SVM (RBF)** | **0.807** | **0.807** |
-| CNN | _Phase 4_ | _Phase 4_ |
+| XGBoost | 0.713 | 0.714 |
+| CNN (from-scratch, GTX 1650) | 0.693 | 0.668 |
 
-Reproduce: `python -m src.training.train_classic` (logs to `./mlruns`; view with
-`mlflow ui --backend-store-uri ./mlruns`).
+**Finding:** classic ML on hand-crafted librosa features **beats** the small
+from-scratch CNN on GTZAN — a known result on this dataset, and a good talking
+point about when deep learning is worth the cost. The CNN trains in ~21 epochs
+(early-stopped) on a 4GB GTX 1650 with mixed precision; more tuning (LR schedule,
+heavier augmentation) would close the gap but the benchmark story holds. Phase 5
+adds per-class F1 and inference-latency columns.
+
+Reproduce: `python -m src.training.train_classic` and
+`python -m src.training.train_cnn --device cuda` (both log to `./mlruns`; view
+with `mlflow ui --backend-store-uri ./mlruns`).
