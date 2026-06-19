@@ -1,18 +1,39 @@
-# Music Genre Classification — Benchmark + MLOps
+# 🎵 Music Genre Classification — Benchmark + MLOps
 
-Classify 30-second audio clips into 10 genres, **benchmarking three approaches
-on the same held-out test set**:
+![Python](https://img.shields.io/badge/python-3.12-blue)
+![License: MIT](https://img.shields.io/badge/license-MIT-green)
+![Lint: ruff](https://img.shields.io/badge/lint-ruff-orange)
+![Tests](https://img.shields.io/badge/tests-33%20passing-brightgreen)
 
-- **(A) Classic ML** — `librosa` audio features → `StandardScaler` → XGBoost & SVM
-- **(B) Deep learning** — a small from-scratch CNN on mel-spectrograms (AMP, light SpecAugment)
-- **(C) Transfer learning** — a linear probe on frozen **PANNs CNN14** embeddings (the winner, 0.873)
+An end-to-end, reproducible system that classifies 30-second audio clips into 10
+genres and **benchmarks three modeling approaches on the same held-out test
+set** — wrapped in a production-style MLOps loop (experiment tracking, a REST
+API, containerization, and CI).
 
-…wrapped in a full MLOps loop: MLflow experiment tracking, a FastAPI prediction
-service, Docker packaging, and GitHub Actions CI.
+**Approaches compared**
 
-> **Why a benchmark?** On GTZAN, classic ML on hand-crafted features often
-> matches or beats a small from-scratch CNN. The benchmark framing makes that a
-> *finding* about when deep learning is worth it — not a failure.
+| | Approach | How |
+|---|---|---|
+| **A** | Classic ML | `librosa` features → `StandardScaler` → XGBoost & SVM |
+| **B** | Deep learning | small **from-scratch CNN** on mel-spectrograms (AMP, SpecAugment) |
+| **C** | Transfer learning | linear probe on frozen **PANNs CNN14** embeddings ⭐ |
+
+### Results at a glance — held-out test set (150 clips), ranked by macro-F1
+
+| Model | Accuracy | Macro-F1 |
+|---|---|---|
+| ⭐ **PANNs CNN14 embeddings + linear probe** | **0.873** | **0.873** |
+| SVM (RBF) on librosa features | 0.807 | 0.807 |
+| XGBoost | 0.713 | 0.714 |
+| CNN (from scratch) | 0.693 | 0.668 |
+
+**Headline takeaways**
+- 📈 **Transfer learning wins** — pretrained audio embeddings beat both hand-crafted features and a from-scratch CNN on a small dataset.
+- 🧪 **The from-scratch CNN loses to a plain SVM** — with only ~700 training clips, "deep learning" is not automatically better.
+- 🕵️ **Honest evaluation** — track-grouped splits show the famous "~90% on GTZAN" results are largely a **data-leakage artifact**.
+
+> Built as a hands-on portfolio project to practice the full ML lifecycle end to
+> end — raw audio → reproducible training → experiment tracking → a deployed API.
 
 ---
 
@@ -93,8 +114,8 @@ music-genre-classification/
 │   ├── evaluation/        # unified metrics + comparison          (Phase 5)
 │   └── api/               # FastAPI app                           (Phase 6)
 ├── configs/               # YAML configs — no hardcoded params
-├── tests/                 # pytest
-├── notebooks/             # 01_eda, 02_results_analysis
+├── tests/                 # pytest (33 tests)
+├── notebooks/             # 01_eda, 02_kaggle_train_cnn, 03_results_analysis
 ├── Dockerfile             # (Phase 7)
 ├── docker-compose.yml     # (Phase 7)
 ├── .github/workflows/     # CI: lint + tests                      (Phase 7)
@@ -112,9 +133,11 @@ seed (`42`) is fixed everywhere for reproducibility.
 | File | Controls |
 |---|---|
 | `configs/data.yaml` | dataset paths, genres, corrupt-file list, train/val/test split |
-| `configs/features.yaml` | classic feature set + mel-spectrogram params |
-| `configs/classic.yaml` | XGBoost & SVM hyperparameters |
+| `configs/features.yaml` | classic feature set, mel-spectrogram + segmentation params |
+| `configs/classic.yaml` | XGBoost & SVM hyperparameters + SVM sweep grid |
 | `configs/cnn.yaml` | CNN architecture, training, augmentation |
+| `configs/embeddings.yaml` | PANNs backbone + linear-probe settings |
+| `configs/serving.yaml` | which model the API serves |
 
 ---
 
@@ -127,11 +150,13 @@ python -m venv .venv
 pip install -r requirements.txt
 ```
 
-**PyTorch on a local GTX 1650 (4GB):** `requirements.txt` pins the default
-`torch`/`torchaudio` build. To use your local CUDA GPU, install the matching
-CUDA build from <https://pytorch.org/get-started/locally/> instead (e.g. the
-`cu121` wheels). On Kaggle a CUDA build is already preinstalled — skip the local
-torch install there.
+**PyTorch / GPU:** plain `pip install torch` on Windows gives a **CPU-only**
+build. To use an NVIDIA GPU (this project was trained on a 4GB GTX 1650),
+install the matching CUDA build from
+<https://pytorch.org/get-started/locally/> — e.g.
+`pip install torch==2.3.1 --index-url https://download.pytorch.org/whl/cu121`.
+Training the small CNN fits in 4GB with mixed precision; Kaggle's free 16GB GPU
+is an optional alternative (see `notebooks/02_kaggle_train_cnn.ipynb`).
 
 ---
 
@@ -247,3 +272,42 @@ Reproduce: `python -m src.training.train_classic`,
 `python -m src.features.extract_embeddings && python -m src.training.train_embeddings`,
 and `python -m src.training.train_cnn --device cuda` (all log to `./mlruns`; view
 with `mlflow ui --backend-store-uri ./mlruns`).
+
+---
+
+## ⚠️ Disclaimer
+
+This is an **educational / portfolio project**, not a production service.
+
+- **Closed-set classifier.** It only knows the 10 GTZAN genres (blues, classical,
+  country, disco, hiphop, jazz, metal, pop, reggae, rock). Given audio outside
+  these — or any non-music input — it returns the *nearest* of the 10, never
+  "unknown". Expect low / split confidence on out-of-distribution songs.
+- **Trained on GTZAN**, a small (~1000-clip, early-2000s) research dataset with
+  documented quality and licensing caveats. The models reflect that dataset's
+  biases and are **not** robust real-world genre taggers.
+- **No commercial use.** The GTZAN dataset and the pretrained PANNs CNN14 weights
+  carry their own terms — respect them. Results (~0.87 macro-F1) are reported
+  under a leakage-safe, track-grouped split and are intentionally lower than the
+  inflated numbers commonly quoted for GTZAN.
+
+---
+
+## 📄 License
+
+Released under the [MIT License](LICENSE) © 2026 Shashank Singhal.
+
+The MIT license covers the **original code in this repository only**. The GTZAN
+dataset and PANNs CNN14 pretrained weights are the property of their respective
+authors and are used here for research / educational purposes under their own
+terms.
+
+---
+
+## 🙏 Acknowledgements
+
+- **GTZAN** — G. Tzanetakis & P. Cook, *Musical Genre Classification of Audio
+  Signals* (2002).
+- **PANNs** — Kong et al., *PANNs: Large-Scale Pretrained Audio Neural Networks
+  for Audio Pattern Recognition* (2020).
+- Built with PyTorch, scikit-learn, XGBoost, librosa, MLflow, and FastAPI.
