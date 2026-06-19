@@ -110,7 +110,7 @@ This project is built in reviewable phases. Status:
 - [x] **Phase 1 — Data layer** *(Kaggle + repo)* — validation, stratified split, EDA notebook
 - [x] **Phase 2 — Feature extraction** *(Kaggle/local)* — librosa feature table + cached mel-spectrograms, shape/NaN tests
 - [x] **Phase 3 — Classic ML** *(local + MLflow)* — XGBoost + SVM, tracked in MLflow
-- [ ] **Phase 4 — CNN** *(Kaggle)* — small CNN, AMP, early stopping
+- [x] **Phase 4 — CNN** *(local CPU smoke + Kaggle GPU)* — small CNN, SpecAugment, AMP, early stopping
 - [ ] **Phase 5 — Unified evaluation** *(local)* — same-test-set comparison table + notebook
 - [ ] **Phase 6 — Serving** *(local)* — FastAPI `/predict` + `/health`
 - [ ] **Phase 7 — Packaging & CI** *(local)* — Docker, docker-compose, GitHub Actions
