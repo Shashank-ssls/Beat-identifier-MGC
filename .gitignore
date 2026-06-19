@@ -20,8 +20,9 @@ mlruns/
 mlartifacts/
 
 # ── Trained models & generated reports (regenerable; not committed) ───
-models/
-reports/
+# Leading slash anchors to repo root so this does NOT match src/models/.
+/models/
+/reports/
 
 # ── Caches ────────────────────────────────────────────────────────────
 .cache/
