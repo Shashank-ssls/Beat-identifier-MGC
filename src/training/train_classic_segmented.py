@@ -22,7 +22,6 @@ import json
 import joblib
 import mlflow
 import mlflow.sklearn
-import numpy as np
 import pandas as pd
 from sklearn.model_selection import GridSearchCV, GroupKFold
 

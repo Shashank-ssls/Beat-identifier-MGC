@@ -1,0 +1,39 @@
+name: CI
+
+on:
+  push:
+    branches: [main, master]
+  pull_request:
+
+jobs:
+  lint-and-test:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+          cache: pip
+
+      - name: Install dependencies
+        run: |
+          python -m pip install --upgrade pip
+          # CPU torch (the default Linux wheel is a huge CUDA build).
+          pip install torch==2.3.1 --index-url https://download.pytorch.org/whl/cpu
+          pip install -r requirements.txt
+
+      - name: Lint (ruff)
+        run: ruff check src tests
+
+      - name: Tests (pytest)
+        # Data/model-dependent tests auto-skip on CI (no GTZAN / no trained
+        # models); the synthetic model/feature/API-logic tests still run.
+        run: pytest -q
+
+  docker-build:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Build serving image (validation only, no push)
+        run: docker build -t genre-api:ci .

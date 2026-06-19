@@ -1,0 +1,11 @@
+[tool.ruff]
+line-length = 100
+target-version = "py312"
+
+[tool.ruff.lint]
+# Default rules (pyflakes F + pycodestyle E4/E7/E9) plus import sorting (I).
+extend-select = ["I"]
+
+[tool.pytest.ini_options]
+addopts = "-q"
+testpaths = ["tests"]

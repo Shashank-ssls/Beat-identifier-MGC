@@ -1,10 +1,11 @@
 # Music Genre Classification — Benchmark + MLOps
 
-Classify 30-second audio clips into 10 genres, **benchmarking two approaches on
-the same held-out test set**:
+Classify 30-second audio clips into 10 genres, **benchmarking three approaches
+on the same held-out test set**:
 
 - **(A) Classic ML** — `librosa` audio features → `StandardScaler` → XGBoost & SVM
 - **(B) Deep learning** — a small from-scratch CNN on mel-spectrograms (AMP, light SpecAugment)
+- **(C) Transfer learning** — a linear probe on frozen **PANNs CNN14** embeddings (the winner, 0.873)
 
 …wrapped in a full MLOps loop: MLflow experiment tracking, a FastAPI prediction
 service, Docker packaging, and GitHub Actions CI.
@@ -26,6 +27,56 @@ service, Docker packaging, and GitHub Actions CI.
 **Artifact flow:** train on Kaggle → log metrics/params to MLflow → download
 trained weights as a Kaggle output → register them in local MLflow → FastAPI
 loads the best model from the local registry.
+
+---
+
+## Architecture
+
+```
+            GTZAN .wav (10 genres x 100 clips)
+                          │
+        ┌─────────────────┴─────────────────┐
+        │  Data layer (split BEFORE features)│  stratified 70/15/15,
+        │  validate · corrupt-file drop      │  committed manifest (anti-leak)
+        └─────────────────┬─────────────────┘
+        ┌──────────┬───────┴───────┬───────────────┐
+        ▼          ▼               ▼               ▼
+   librosa     mel-spec        3s segments     PANNs CNN14
+   features    (128 bands)     (10x rows)      embeddings (2048-d)
+        │          │               │               │
+        ▼          ▼               ▼               ▼
+   XGBoost/SVM  from-scratch    tuned SVM       linear probe
+                CNN (AMP)       (GroupKFold)    (transfer learn)
+        └──────────┴───────┬───────┴───────────────┘
+                           ▼
+                MLflow  (params · metrics · confusion matrices · models)
+                           ▼
+            Unified eval  → reports/comparison.csv (same test set)
+                           ▼
+            FastAPI  /predict  /health   →   Docker · docker-compose · CI
+```
+
+---
+
+## Quickstart
+
+```bash
+python -m venv .venv && . .venv/Scripts/activate   # (Unix: source .venv/bin/activate)
+pip install -r requirements.txt
+
+python -m src.data.split                      # reproducible split (already committed)
+python -m src.features.extract                # librosa features + mel-spectrograms
+python -m src.training.train_classic          # XGBoost + SVM  → MLflow + models/
+python -m src.training.train_cnn --device auto # CNN (uses GPU if available)
+python -m src.evaluation.evaluate             # comparison table → reports/
+uvicorn src.api.app:app --reload              # serve → http://127.0.0.1:8000/docs
+```
+
+Optional accuracy enhancements (see Results):
+```bash
+python -m src.features.extract_segments    && python -m src.training.train_classic_segmented
+python -m src.features.extract_embeddings  && python -m src.training.train_embeddings   # best, 0.873
+```
 
 ---
 
@@ -113,7 +164,7 @@ This project is built in reviewable phases. Status:
 - [x] **Phase 4 — CNN** *(local CPU smoke + Kaggle GPU)* — small CNN, SpecAugment, AMP, early stopping
 - [x] **Phase 5 — Unified evaluation** *(local)* — same-test-set comparison table + notebook
 - [x] **Phase 6 — Serving** *(local)* — FastAPI `/predict` + `/health`, loads the best model
-- [ ] **Phase 7 — Packaging & CI** *(local)* — Docker, docker-compose, GitHub Actions
+- [x] **Phase 7 — Packaging & CI** *(local)* — Dockerfile, docker-compose (api + mlflow), GitHub Actions
 
 ---
 
@@ -132,7 +183,26 @@ uvicorn src.api.app:app --reload          # then open http://127.0.0.1:8000/docs
 curl -F "file=@some_clip.wav" http://127.0.0.1:8000/predict
 ```
 
-To serve the CNN instead, set `model.kind: cnn` in `configs/serving.yaml`.
+To serve a different model, set `model.kind` in `configs/serving.yaml` to `cnn`
+or `embeddings` (PANNs — most accurate but a heavier container).
+
+### Docker
+
+```bash
+docker compose up --build
+#   api    → http://localhost:8000/docs
+#   mlflow → http://localhost:5000
+```
+
+The image is intentionally small — it installs only the SVM serving stack
+(`requirements-serve.txt`, no torch). Your trained model in `./models` is
+mounted read-only at runtime (models are gitignored, not baked into the image).
+
+### CI
+
+`.github/workflows/ci.yml` runs on every push/PR: **ruff** lint, **pytest**
+(data/model-dependent tests auto-skip when GTZAN/weights aren't present), and a
+**Docker build** to validate the image. No secrets required.
 
 ---
 

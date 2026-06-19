@@ -1,0 +1,31 @@
+# Two-service stack: the prediction API + an MLflow tracking UI.
+#
+#   docker compose up --build
+#     api    → http://localhost:8000/docs   (upload a clip, get a genre)
+#     mlflow → http://localhost:5000         (browse experiment runs)
+#
+# Prereq: a trained model in ./models (e.g. models/classic_svm.joblib).
+# It's mounted read-only into the API container (models are gitignored, not
+# baked into the image).
+
+services:
+  api:
+    build: .
+    ports:
+      - "8000:8000"
+    volumes:
+      - ./models:/app/models:ro       # trained model(s)
+      - ./configs:/app/configs:ro     # serving config (switch model here)
+    restart: unless-stopped
+
+  mlflow:
+    image: ghcr.io/mlflow/mlflow:v2.14.3
+    ports:
+      - "5000:5000"
+    volumes:
+      - ./mlruns:/mlruns              # the local tracking store written by training
+    command: >
+      mlflow server
+      --host 0.0.0.0 --port 5000
+      --backend-store-uri file:/mlruns
+    restart: unless-stopped

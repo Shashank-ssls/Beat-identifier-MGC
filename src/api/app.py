@@ -20,7 +20,6 @@ import io
 from contextlib import asynccontextmanager
 
 import librosa
-
 from fastapi import FastAPI, File, HTTPException, UploadFile
 
 from src.api.predictor import Predictor

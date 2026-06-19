@@ -14,10 +14,10 @@ scikit-learn==1.5.1
 xgboost==2.1.1
 
 # ── Deep learning (CPU/GPU build resolved by the install env) ─────────
-# On Kaggle a CUDA build is preinstalled; locally install the build that
-# matches your CUDA. See README for the GTX 1650 install note.
+# Plain `pip install torch` on Windows = CPU-only. For an NVIDIA GPU install
+# the CUDA build, e.g. `--index-url https://download.pytorch.org/whl/cu121`
+# (see README). torchaudio is not needed — SpecAugment is hand-rolled.
 torch==2.3.1
-torchaudio==2.3.1
 
 # ── Pretrained audio embeddings (transfer-learning path) ──────────────
 # PANNs CNN14 backbone. Note: panns_inference downloads its checkpoint via
