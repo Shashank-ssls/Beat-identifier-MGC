@@ -19,6 +19,10 @@ data/*
 mlruns/
 mlartifacts/
 
+# ── Trained models & generated reports (regenerable; not committed) ───
+models/
+reports/
+
 # ── Caches ────────────────────────────────────────────────────────────
 .cache/
 features_cache/

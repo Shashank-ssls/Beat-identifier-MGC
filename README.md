@@ -109,7 +109,7 @@ This project is built in reviewable phases. Status:
 - [x] **Phase 0 — Scaffolding** *(local)* — repo structure, configs, requirements, README outline
 - [x] **Phase 1 — Data layer** *(Kaggle + repo)* — validation, stratified split, EDA notebook
 - [x] **Phase 2 — Feature extraction** *(Kaggle/local)* — librosa feature table + cached mel-spectrograms, shape/NaN tests
-- [ ] **Phase 3 — Classic ML** *(Kaggle → local MLflow)* — XGBoost + SVM
+- [x] **Phase 3 — Classic ML** *(local + MLflow)* — XGBoost + SVM, tracked in MLflow
 - [ ] **Phase 4 — CNN** *(Kaggle)* — small CNN, AMP, early stopping
 - [ ] **Phase 5 — Unified evaluation** *(local)* — same-test-set comparison table + notebook
 - [ ] **Phase 6 — Serving** *(local)* — FastAPI `/predict` + `/health`
@@ -119,5 +119,14 @@ This project is built in reviewable phases. Status:
 
 ## Results
 
-_Populated in Phase 5 — comparison of accuracy, macro-F1, per-class F1, and
-inference latency for XGBoost vs SVM vs CNN on the same test set._
+Held-out **test set** (150 clips). Full comparison (incl. CNN + latency) lands
+in Phase 5; classic-path numbers so far:
+
+| Model | Test accuracy | Test macro-F1 |
+|---|---|---|
+| XGBoost | 0.713 | 0.714 |
+| **SVM (RBF)** | **0.807** | **0.807** |
+| CNN | _Phase 4_ | _Phase 4_ |
+
+Reproduce: `python -m src.training.train_classic` (logs to `./mlruns`; view with
+`mlflow ui --backend-store-uri ./mlruns`).
