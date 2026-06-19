@@ -21,6 +21,9 @@ melspec:
   hop_length: 512
   fmin: 0
   fmax: null                   # null → sr/2 (Nyquist)
+  duration_seconds: 30         # pad/truncate every clip to this many seconds
+                               #   → every spectrogram has identical width so the
+                               #     CNN can batch them without resizing
   to_db: true                  # convert power spectrogram to dB scale
-  normalize: true              # per-spectrogram standardization
-  cache_path: features_cache/melspecs   # one tensor file per clip
+  normalize: true              # per-spectrogram standardization (z-score)
+  cache_path: features_cache/melspecs   # one tensor file (.npy) per clip
