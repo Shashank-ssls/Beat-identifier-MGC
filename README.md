@@ -111,7 +111,7 @@ This project is built in reviewable phases. Status:
 - [x] **Phase 2 — Feature extraction** *(Kaggle/local)* — librosa feature table + cached mel-spectrograms, shape/NaN tests
 - [x] **Phase 3 — Classic ML** *(local + MLflow)* — XGBoost + SVM, tracked in MLflow
 - [x] **Phase 4 — CNN** *(local CPU smoke + Kaggle GPU)* — small CNN, SpecAugment, AMP, early stopping
-- [ ] **Phase 5 — Unified evaluation** *(local)* — same-test-set comparison table + notebook
+- [x] **Phase 5 — Unified evaluation** *(local)* — same-test-set comparison table + notebook
 - [ ] **Phase 6 — Serving** *(local)* — FastAPI `/predict` + `/health`
 - [ ] **Phase 7 — Packaging & CI** *(local)* — Docker, docker-compose, GitHub Actions
 
@@ -122,18 +122,19 @@ This project is built in reviewable phases. Status:
 Held-out **test set** (150 clips). Full comparison (incl. CNN + latency) lands
 in Phase 5; classic-path numbers so far:
 
-| Model | Test accuracy | Test macro-F1 |
-|---|---|---|
-| **SVM (RBF)** | **0.807** | **0.807** |
-| XGBoost | 0.713 | 0.714 |
-| CNN (from-scratch, GTX 1650) | 0.693 | 0.668 |
+| Model | Test accuracy | Test macro-F1 | Latency (ms/clip, CPU) |
+|---|---|---|---|
+| **SVM (RBF)** | **0.807** | **0.807** | **0.24** |
+| XGBoost | 0.713 | 0.714 | 1.03 |
+| CNN (from-scratch, GTX 1650) | 0.693 | 0.668 | 19.4 |
 
 **Finding:** classic ML on hand-crafted librosa features **beats** the small
 from-scratch CNN on GTZAN — a known result on this dataset, and a good talking
 point about when deep learning is worth the cost. The CNN trains in ~21 epochs
 (early-stopped) on a 4GB GTX 1650 with mixed precision; more tuning (LR schedule,
-heavier augmentation) would close the gap but the benchmark story holds. Phase 5
-adds per-class F1 and inference-latency columns.
+heavier augmentation) would close the gap but the benchmark story holds. The SVM is both the most
+accurate **and** ~80x cheaper to serve. Full per-class F1 table:
+`reports/comparison.csv`; analysis in `notebooks/03_results_analysis.ipynb`.
 
 Reproduce: `python -m src.training.train_classic` and
 `python -m src.training.train_cnn --device cuda` (both log to `./mlruns`; view

@@ -1,0 +1,161 @@
+"""Phase 5 — unified evaluation: every model on the SAME test set.
+
+## What this code does
+This is the centerpiece of the benchmark. It loads the three trained models
+(SVM, XGBoost, CNN), runs each on the identical held-out test split, and produces
+one comparison table with:
+- accuracy and macro-F1 (overall quality),
+- per-class F1 (where each model is strong/weak by genre),
+- inference latency in ms/clip (how expensive each model is to serve).
+
+Latency is measured **model-only on CPU** (i.e. given the prepared input), one
+clip at a time — the serving-realistic view, and the only way classic vs CNN is
+an apples-to-apples cost comparison (their feature pre-processing differs).
+
+Outputs: prints the table and writes `reports/comparison.csv`,
+`reports/comparison.md`, and a confusion matrix per model.
+
+    python -m src.evaluation.evaluate
+"""
+
+from __future__ import annotations
+
+import json
+import time
+from pathlib import Path
+
+import joblib
+import numpy as np
+import pandas as pd
+
+from src.data.manifest import label_maps
+from src.evaluation.metrics import compute_metrics, save_confusion_matrix
+from src.features.classic_features import feature_names
+from src.utils import PROJECT_ROOT, load_config
+
+MODELS_DIR = PROJECT_ROOT / "models"
+REPORTS_DIR = PROJECT_ROOT / "reports"
+
+
+# ----------------------------------------------------------------------------
+# Per-model evaluation
+# ----------------------------------------------------------------------------
+def _load_classic_test():
+    """Return (X_test, y_test) from the cached classic feature table."""
+    fcfg = load_config("features")
+    df = pd.read_parquet(PROJECT_ROOT / fcfg["classic"]["cache_path"])
+    test = df[df["split"] == "test"]
+    cols = feature_names(fcfg["classic"])
+    return test[cols].to_numpy(), test["label_idx"].to_numpy()
+
+
+def eval_classic(name: str, class_names: list[str]) -> dict | None:
+    path = MODELS_DIR / f"classic_{name}.joblib"
+    if not path.exists():
+        return None
+    model = joblib.load(path)
+    X, y = _load_classic_test()
+
+    y_pred = model.predict(X)
+    metrics = compute_metrics(y, y_pred, class_names)
+
+    # latency: one sample at a time, mean over the test set (after a warmup).
+    model.predict(X[:1])
+    t0 = time.perf_counter()
+    for i in range(len(X)):
+        model.predict(X[i : i + 1])
+    metrics["latency_ms"] = (time.perf_counter() - t0) / len(X) * 1000
+    save_confusion_matrix(y, y_pred, class_names, REPORTS_DIR / f"cm_{name}.png",
+                          title=f"{name} — test confusion matrix")
+    return metrics
+
+
+def eval_cnn(class_names: list[str]) -> dict | None:
+    weights = MODELS_DIR / "cnn.pt"
+    arch = MODELS_DIR / "cnn_arch.json"
+    if not (weights.exists() and arch.exists()):
+        return None
+
+    import torch  # local import: only the CNN path needs torch
+
+    from src.data.melspec_dataset import MelspecDataset
+    from src.models.cnn import build_cnn
+
+    model = build_cnn(json.loads(arch.read_text()))
+    model.load_state_dict(torch.load(weights, map_location="cpu"))
+    model.eval()  # CPU — serving-realistic latency
+
+    ds = MelspecDataset("test")
+    y_true, y_pred = [], []
+    with torch.no_grad():
+        for x, y in ds:
+            logits = model(x.unsqueeze(0))  # add batch dim
+            y_pred.append(int(logits.argmax(1)))
+            y_true.append(int(y))
+    metrics = compute_metrics(np.array(y_true), np.array(y_pred), class_names)
+
+    # latency: single-clip forward pass, mean over the test set (after warmup).
+    with torch.no_grad():
+        x0, _ = ds[0]
+        model(x0.unsqueeze(0))
+        t0 = time.perf_counter()
+        for i in range(len(ds)):
+            xi, _ = ds[i]
+            model(xi.unsqueeze(0))
+    metrics["latency_ms"] = (time.perf_counter() - t0) / len(ds) * 1000
+    save_confusion_matrix(np.array(y_true), np.array(y_pred), class_names,
+                          REPORTS_DIR / "cm_cnn.png", title="CNN — test confusion matrix")
+    return metrics
+
+
+# ----------------------------------------------------------------------------
+# Table assembly
+# ----------------------------------------------------------------------------
+def build_comparison_table(results: dict[str, dict], class_names: list[str]) -> pd.DataFrame:
+    """Turn {model_name: metrics_dict} into a tidy, ordered comparison DataFrame."""
+    headline = ["accuracy", "macro_f1", "latency_ms"]
+    per_class = [f"f1_{c}" for c in class_names]
+    rows = []
+    for model_name, m in results.items():
+        row = {"model": model_name}
+        row.update({k: m[k] for k in headline})
+        row.update({k: m[k] for k in per_class})
+        rows.append(row)
+    df = pd.DataFrame(rows).set_index("model")
+    # Rank by macro-F1 (the fairest single number on a balanced 10-way task).
+    return df.sort_values("macro_f1", ascending=False)
+
+
+def main() -> None:
+    _, idx_to_genre = label_maps()
+    class_names = [idx_to_genre[i] for i in range(len(idx_to_genre))]
+
+    results: dict[str, dict] = {}
+    for name in ("svm", "xgboost"):
+        m = eval_classic(name, class_names)
+        if m:
+            results[name] = m
+    cnn = eval_cnn(class_names)
+    if cnn:
+        results["cnn"] = cnn
+
+    if not results:
+        raise SystemExit(
+            "No trained models found in models/. Train them first:\n"
+            "  python -m src.training.train_classic\n"
+            "  python -m src.training.train_cnn --device cuda"
+        )
+
+    df = build_comparison_table(results, class_names)
+    REPORTS_DIR.mkdir(parents=True, exist_ok=True)
+    df.to_csv(REPORTS_DIR / "comparison.csv")
+    (REPORTS_DIR / "comparison.md").write_text(df.round(3).to_markdown())
+
+    pd.set_option("display.width", 140, "display.max_columns", 20)
+    print("\n=== Model comparison (same test set, ranked by macro-F1) ===")
+    print(df[["accuracy", "macro_f1", "latency_ms"]].round(3).to_string())
+    print(f"\nFull per-class table written to {REPORTS_DIR / 'comparison.csv'}")
+
+
+if __name__ == "__main__":
+    main()
