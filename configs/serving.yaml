@@ -1,0 +1,15 @@
+# Serving config (Phase 6). Which trained model the FastAPI app loads.
+# Default = SVM, the benchmark winner (best macro-F1, lowest latency).
+
+model:
+  kind: classic        # classic | cnn
+  name: svm            # classic: svm | xgboost   (ignored for cnn)
+  # Paths are relative to the repo root.
+  classic_path: models/classic_svm.joblib
+  cnn_weights: models/cnn.pt
+  cnn_arch: models/cnn_arch.json
+
+api:
+  title: Music Genre Classifier
+  # Max upload size (MB) accepted by /predict — guards against huge files.
+  max_upload_mb: 25

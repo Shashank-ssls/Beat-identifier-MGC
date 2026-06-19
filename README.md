@@ -112,8 +112,27 @@ This project is built in reviewable phases. Status:
 - [x] **Phase 3 — Classic ML** *(local + MLflow)* — XGBoost + SVM, tracked in MLflow
 - [x] **Phase 4 — CNN** *(local CPU smoke + Kaggle GPU)* — small CNN, SpecAugment, AMP, early stopping
 - [x] **Phase 5 — Unified evaluation** *(local)* — same-test-set comparison table + notebook
-- [ ] **Phase 6 — Serving** *(local)* — FastAPI `/predict` + `/health`
+- [x] **Phase 6 — Serving** *(local)* — FastAPI `/predict` + `/health`, loads the best model
 - [ ] **Phase 7 — Packaging & CI** *(local)* — Docker, docker-compose, GitHub Actions
+
+---
+
+## Serving the model
+
+The FastAPI app loads the best model (SVM by default — see `configs/serving.yaml`)
+once at startup and exposes:
+
+| Endpoint | Description |
+|---|---|
+| `GET /health` | liveness + which model is loaded (e.g. `classic:svm`) |
+| `POST /predict` | upload an audio file → `{genre, confidence, probabilities}` |
+
+```bash
+uvicorn src.api.app:app --reload          # then open http://127.0.0.1:8000/docs
+curl -F "file=@some_clip.wav" http://127.0.0.1:8000/predict
+```
+
+To serve the CNN instead, set `model.kind: cnn` in `configs/serving.yaml`.
 
 ---
 
