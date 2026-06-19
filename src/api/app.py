@@ -72,7 +72,11 @@ async def predict(file: UploadFile = File(...)):
     return {
         "filename": file.filename,
         "model": predictor.description,
-        "genre": result.genre,
-        "confidence": round(result.confidence, 4),
-        "probabilities": {g: round(p, 4) for g, p in result.probabilities.items()},
+        "genre": result.genre,                 # "uncertain" when confidence is low
+        "best_guess": result.best_guess,       # the top genre regardless
+        "confidence": result.confidence,
+        "uncertain": result.uncertain,
+        "top_k": result.top_k,
+        "n_windows": result.n_windows,
+        "probabilities": result.probabilities,
     }

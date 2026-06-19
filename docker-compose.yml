@@ -13,6 +13,10 @@ services:
     build: .
     ports:
       - "8000:8000"
+    environment:
+      # Keep the slim image serving the light SVM even though serving.yaml
+      # defaults to the (heavy) PANNs model for local use.
+      - MGC_SERVE_KIND=classic
     volumes:
       - ./models:/app/models:ro       # trained model(s)
       - ./configs:/app/configs:ro     # serving config (switch model here)

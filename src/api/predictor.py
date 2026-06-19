@@ -1,20 +1,27 @@
 """Model-agnostic predictor used by the serving API.
 
 ## What this code does
-Wraps "audio in → genre out" behind one interface so the FastAPI layer doesn't
+Wraps "audio in -> genre out" behind one interface so the FastAPI layer doesn't
 care which model is loaded. Given a decoded waveform it:
-1. runs the right feature pipeline for the configured model (librosa feature
-   vector for classic; mel-spectrogram for the CNN — the SAME code paths used in
-   training, so serving and training can't drift), then
-2. returns the predicted genre, a confidence (top probability), and the full
-   probability distribution over all 10 genres.
+1. **slides a window** over the audio (so a full 3-minute song is handled, not
+   just a 30s clip), runs the right feature pipeline per window (librosa vector /
+   PANNs embedding), and **averages** the per-window probabilities (soft voting);
+2. returns the top genre, a confidence, the top-k guesses, and the full
+   distribution — and flags the result **`uncertain`** when the top probability
+   is below a configurable threshold (so out-of-distribution songs don't get a
+   falsely confident single label).
 
-The predictor is built once at app startup and reused for every request.
+The CNN path is single-shot (its mel-spectrogram step already fixes the length).
+
+Config: `configs/serving.yaml` (`model.kind`, `inference.*`). The served model
+can be overridden at runtime with the `MGC_SERVE_KIND` env var (the Docker image
+sets it to `classic` to keep the container light).
 """
 
 from __future__ import annotations
 
 import json
+import os
 from dataclasses import dataclass
 
 import numpy as np
@@ -25,25 +32,31 @@ from src.utils import PROJECT_ROOT, load_config
 
 @dataclass
 class Prediction:
-    genre: str
-    confidence: float
-    probabilities: dict[str, float]
+    genre: str                       # top genre, or "uncertain" below threshold
+    best_guess: str                  # always the argmax genre (even if uncertain)
+    confidence: float                # probability of best_guess
+    uncertain: bool
+    top_k: list[dict]                # [{"genre": str, "prob": float}, ...]
+    probabilities: dict[str, float]  # full distribution over all genres
+    n_windows: int                   # how many windows were averaged
 
 
 class Predictor:
     def __init__(self):
         scfg = load_config("serving")["model"]
-        self.kind = scfg["kind"]
+        # Runtime override (e.g. Docker sets MGC_SERVE_KIND=classic).
+        self.kind = os.environ.get("MGC_SERVE_KIND", scfg["kind"])
+
+        inf = load_config("serving").get("inference", {})
+        self.threshold = inf.get("confidence_threshold", 0.45)
+        self.top_k = inf.get("top_k", 3)
+        self.window_seconds = inf.get("window_seconds", 30)
+        self.hop_seconds = inf.get("hop_seconds", 15)
+
         _, idx_to_genre = label_maps()
         self.class_names = [idx_to_genre[i] for i in range(len(idx_to_genre))]
-
-        dcfg = load_config("data")
-        self.sample_rate = dcfg["dataset"]["sample_rate"]
+        self.sample_rate = load_config("data")["dataset"]["sample_rate"]
         self.fcfg = load_config("features")
-
-        # Optional: if set, the classic model was trained on N-second segments,
-        # so at serving time we segment the upload and average segment probs.
-        self.segment_seconds = scfg.get("segment_seconds")
 
         if self.kind == "classic":
             import joblib
@@ -63,8 +76,6 @@ class Predictor:
             self.model.eval()
             self.name = "cnn"
         elif self.kind == "embeddings":
-            # PANNs CNN14 backbone (frozen) + a linear probe. Most accurate, but
-            # heaviest to serve (loads the ~330MB checkpoint).
             import joblib
 
             self.model = joblib.load(PROJECT_ROOT / scfg["embeddings_path"])
@@ -78,56 +89,80 @@ class Predictor:
     def description(self) -> str:
         return f"{self.kind}:{self.name}"
 
-    def predict(self, y: np.ndarray) -> Prediction:
-        """Decoded mono waveform (at self.sample_rate) → Prediction."""
-        if self.kind == "classic":
-            probs = self._predict_classic(y)
-        elif self.kind == "embeddings":
-            probs = self._predict_embeddings(y)
-        else:
-            probs = self._predict_cnn(y)
+    # ---- windowing -----------------------------------------------------------
+    def _windows(self, y: np.ndarray, sr: int) -> list[np.ndarray]:
+        """Split a waveform into overlapping windows (or [y] if it's short)."""
+        w = int(self.window_seconds * sr)
+        h = max(1, int(self.hop_seconds * sr))
+        if w <= 0 or len(y) <= w:
+            return [y]
+        starts = list(range(0, len(y) - w + 1, h))
+        wins = [y[s : s + w] for s in starts]
+        # capture a trailing window if a sizable tail is left uncovered
+        if starts and (len(y) - (starts[-1] + w)) > 0.5 * w:
+            wins.append(y[len(y) - w :])
+        return wins
 
-        top = int(np.argmax(probs))
+    # ---- prediction ----------------------------------------------------------
+    def predict(self, y: np.ndarray) -> Prediction:
+        """Decoded mono waveform (at self.sample_rate) -> Prediction."""
+        if self.kind == "cnn":
+            probs, n = self._predict_cnn(y), 1
+        else:
+            probs, n = self._predict_windowed(y)
+
+        order = np.argsort(probs)[::-1]
+        top = int(order[0])
+        conf = float(probs[top])
+        uncertain = conf < self.threshold
         return Prediction(
-            genre=self.class_names[top],
-            confidence=float(probs[top]),
-            probabilities={g: float(p) for g, p in zip(self.class_names, probs)},
+            genre="uncertain" if uncertain else self.class_names[top],
+            best_guess=self.class_names[top],
+            confidence=round(conf, 4),
+            uncertain=uncertain,
+            top_k=[{"genre": self.class_names[i], "prob": round(float(probs[i]), 4)}
+                   for i in order[: self.top_k]],
+            probabilities={g: round(float(p), 4) for g, p in zip(self.class_names, probs)},
+            n_windows=n,
         )
 
-    def _predict_classic(self, y: np.ndarray) -> np.ndarray:
+    def _predict_windowed(self, y: np.ndarray) -> tuple[np.ndarray, int]:
+        """Average per-window probabilities for classic / embeddings models."""
+        if self.kind == "embeddings":
+            y = self._to_panns_sr(y)
+            sr = self.ecfg["sample_rate"]
+            per_window = self._embed_probs
+        else:  # classic
+            sr = self.sample_rate
+            per_window = self._classic_probs
+
+        wins = self._windows(y, sr)
+        probs = np.mean([per_window(w) for w in wins], axis=0)
+        return probs, len(wins)
+
+    def _classic_probs(self, y: np.ndarray) -> np.ndarray:
         from src.features.classic_features import extract_classic_features, feature_names
 
         names = feature_names(self.fcfg["classic"])
+        feats = extract_classic_features(y, self.sample_rate, self.fcfg["classic"])
+        vec = np.array([feats[n] for n in names]).reshape(1, -1)
+        return self.model.predict_proba(vec)[0]
 
-        def vec_of(sig: np.ndarray) -> np.ndarray:
-            feats = extract_classic_features(sig, self.sample_rate, self.fcfg["classic"])
-            return np.array([feats[n] for n in names])
+    def _to_panns_sr(self, y: np.ndarray) -> np.ndarray:
+        if self.sample_rate != self.ecfg["sample_rate"]:
+            import librosa
 
-        if self.segment_seconds:
-            # Segment the clip, predict each window, average (soft voting) —
-            # mirrors how the segmented model was trained/evaluated.
-            from src.features.extract_segments import segment_waveform
+            y = librosa.resample(y, orig_sr=self.sample_rate, target_sr=self.ecfg["sample_rate"])
+        return y
 
-            seg_len = int(self.segment_seconds * self.sample_rate)
-            segs = segment_waveform(y, seg_len) or [y]  # fall back to whole clip
-            X = np.vstack([vec_of(s) for s in segs])
-            return self.model.predict_proba(X).mean(axis=0)
-
-        # Pipeline ends in a probability-capable estimator (SVC(probability=True)/XGB).
-        return self.model.predict_proba(vec_of(y).reshape(1, -1))[0]
-
-    def _predict_embeddings(self, y: np.ndarray) -> np.ndarray:
-        import librosa
+    def _embed_probs(self, y: np.ndarray) -> np.ndarray:
         from panns_inference import AudioTagging
 
-        if self._tagger is None:  # load the heavy backbone once, on first call
+        if self._tagger is None:  # load the heavy backbone once
             self._tagger = AudioTagging(
                 checkpoint_path=str(PROJECT_ROOT / self.ecfg["checkpoint_path"]),
                 device="cpu",
             )
-        # PANNs wants 32 kHz; resample if the upload was decoded at another rate.
-        if self.sample_rate != self.ecfg["sample_rate"]:
-            y = librosa.resample(y, orig_sr=self.sample_rate, target_sr=self.ecfg["sample_rate"])
         _, emb = self._tagger.inference(y[None, :])
         return self.model.predict_proba(np.asarray(emb).reshape(1, -1))[0]
 
@@ -137,7 +172,6 @@ class Predictor:
         from src.features.melspec import compute_melspec
 
         spec = compute_melspec(y, self.sample_rate, self.fcfg["melspec"])
-        x = torch.from_numpy(spec).unsqueeze(0).unsqueeze(0)  # (1,1,n_mels,frames)
+        x = torch.from_numpy(spec).unsqueeze(0).unsqueeze(0)
         with torch.no_grad():
-            logits = self.model(x)
-            return torch.softmax(logits, dim=1)[0].numpy()
+            return torch.softmax(self.model(x), dim=1)[0].numpy()

@@ -1,18 +1,23 @@
-# Serving config (Phase 6). Which trained model the FastAPI app loads.
-# Default = SVM, the benchmark winner (best macro-F1, lowest latency).
+# Serving config. Which trained model the FastAPI app loads + how it predicts.
 
 model:
   # kind = classic | cnn | embeddings
-  # Default = classic/svm: best accuracy-per-millisecond and a light container.
-  # Set kind: embeddings for the most accurate model (PANNs + linear probe,
-  # 0.873) — but that loads the ~330MB CNN14 checkpoint and is much heavier.
-  kind: classic
+  # Default = embeddings (PANNs CNN14 + linear probe) — the most accurate model
+  # (0.873). It loads the ~330MB checkpoint, so it's heavier to serve.
+  # The Docker image overrides this to `classic` via MGC_SERVE_KIND to stay slim.
+  kind: embeddings
   name: svm            # classic: svm | xgboost   (ignored for cnn/embeddings)
   # Paths are relative to the repo root.
   classic_path: models/classic_svm.joblib
   cnn_weights: models/cnn.pt
   cnn_arch: models/cnn_arch.json
   embeddings_path: models/embeddings_logreg.joblib
+
+inference:
+  confidence_threshold: 0.45   # below this, the top label is reported "uncertain"
+  top_k: 3                     # how many ranked guesses to return
+  window_seconds: 30           # slide a 30s window over long audio...
+  hop_seconds: 15              # ...with 50% overlap, then average the windows
 
 api:
   title: Music Genre Classifier

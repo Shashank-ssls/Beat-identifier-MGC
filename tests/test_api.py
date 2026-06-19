@@ -1,24 +1,26 @@
-"""Tests for the FastAPI serving app (Phase 6).
+"""Tests for the FastAPI serving app (Phase 6 + prediction-quality fixes).
 
-Uses FastAPI's TestClient (no live server). Skips automatically if the trained
-model or a sample GTZAN clip isn't available, so the suite stays green on a
-clean checkout.
+Uses FastAPI's TestClient (no live server). Forces the light SVM model via
+MGC_SERVE_KIND=classic so tests are fast and don't load the heavy PANNs backbone.
+Skips automatically if the SVM model or a sample GTZAN clip isn't available.
 """
 
 from __future__ import annotations
 
 import io
+import os
 
 import pytest
 
-from src.data.manifest import load_clips
-from src.utils import PROJECT_ROOT, load_config
+# Force the light model BEFORE importing the app/predictor.
+os.environ["MGC_SERVE_KIND"] = "classic"
 
-# Skip the whole module if the served model isn't trained yet.
-_scfg = load_config("serving")["model"]
-_model_path = PROJECT_ROOT / _scfg["classic_path"]
-if _scfg["kind"] == "classic" and not _model_path.exists():
-    pytest.skip("served model not trained — run train_classic", allow_module_level=True)
+from src.data.manifest import load_clips  # noqa: E402
+from src.utils import PROJECT_ROOT, load_config  # noqa: E402
+
+_classic_path = PROJECT_ROOT / load_config("serving")["model"]["classic_path"]
+if not _classic_path.exists():
+    pytest.skip("SVM model not trained — run train_classic", allow_module_level=True)
 
 
 def _client():
@@ -26,7 +28,6 @@ def _client():
 
     from src.api.app import app
 
-    # `with` triggers the lifespan handler that loads the model.
     return TestClient(app)
 
 
@@ -36,7 +37,7 @@ def _sample_wav_bytes():
     clip = next((c for c in load_clips("test") if c.path(audio_dir).exists()), None)
     if clip is None:
         pytest.skip("GTZAN audio not present")
-    return clip.path(audio_dir).read_bytes(), clip.genre
+    return clip.path(audio_dir).read_bytes()
 
 
 def test_health():
@@ -45,32 +46,40 @@ def test_health():
         assert r.status_code == 200
         body = r.json()
         assert body["status"] == "ok"
-        assert body["model"]  # e.g. "classic:svm"
+        assert body["model"] == "classic:svm"
 
 
-def test_predict_returns_valid_genre():
-    wav, _true_genre = _sample_wav_bytes()
-    dcfg = load_config("data")
-    genres = sorted(dcfg["dataset"]["genres"])
+def test_predict_shape_and_fields():
+    wav = _sample_wav_bytes()
+    genres = sorted(load_config("data")["dataset"]["genres"])
 
     with _client() as client:
         r = client.post("/predict", files={"file": ("clip.wav", io.BytesIO(wav), "audio/wav")})
         assert r.status_code == 200
-        body = r.json()
-        assert body["genre"] in genres
-        assert 0.0 <= body["confidence"] <= 1.0
-        # probabilities cover all genres and (roughly) sum to 1
-        assert set(body["probabilities"]) == set(genres)
-        assert abs(sum(body["probabilities"].values()) - 1.0) < 0.05
+        b = r.json()
+
+        # new fields from the prediction-quality fixes
+        assert b["best_guess"] in genres
+        assert b["genre"] == "uncertain" or b["genre"] in genres
+        assert isinstance(b["uncertain"], bool)
+        assert 0.0 <= b["confidence"] <= 1.0
+        assert 1 <= len(b["top_k"]) <= 3
+        assert b["top_k"][0]["genre"] == b["best_guess"]          # top_k is ranked
+        assert b["n_windows"] >= 1
+        # probabilities cover all genres and sum to ~1
+        assert set(b["probabilities"]) == set(genres)
+        assert abs(sum(b["probabilities"].values()) - 1.0) < 0.05
 
 
-def test_predict_rejects_empty_file():
+def test_uncertain_flag_consistency():
+    wav = _sample_wav_bytes()
     with _client() as client:
-        r = client.post("/predict", files={"file": ("empty.wav", io.BytesIO(b""), "audio/wav")})
-        assert r.status_code == 400
+        b = client.post("/predict", files={"file": ("c.wav", io.BytesIO(wav), "audio/wav")}).json()
+    # genre is "uncertain" iff the uncertain flag is set
+    assert (b["genre"] == "uncertain") == b["uncertain"]
 
 
-def test_predict_rejects_garbage_audio():
+def test_predict_rejects_empty_and_garbage():
     with _client() as client:
-        r = client.post("/predict", files={"file": ("x.wav", io.BytesIO(b"not audio"), "audio/wav")})
-        assert r.status_code == 400
+        assert client.post("/predict", files={"file": ("e.wav", io.BytesIO(b""), "audio/wav")}).status_code == 400
+        assert client.post("/predict", files={"file": ("x.wav", io.BytesIO(b"nope"), "audio/wav")}).status_code == 400
