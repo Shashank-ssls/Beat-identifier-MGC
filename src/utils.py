@@ -11,12 +11,17 @@ Two small things that the whole project leans on:
 
 from __future__ import annotations
 
+import sys
 from pathlib import Path
 
 import yaml
 
 # Repo root = two levels up from this file (src/utils.py -> src -> repo root).
-PROJECT_ROOT = Path(__file__).resolve().parents[1]
+# When frozen by PyInstaller, bundled data lives under sys._MEIPASS instead.
+if getattr(sys, "frozen", False):
+    PROJECT_ROOT = Path(sys._MEIPASS)  # type: ignore[attr-defined]
+else:
+    PROJECT_ROOT = Path(__file__).resolve().parents[1]
 CONFIGS_DIR = PROJECT_ROOT / "configs"
 
 

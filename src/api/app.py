@@ -18,12 +18,16 @@ from __future__ import annotations
 
 import io
 from contextlib import asynccontextmanager
+from pathlib import Path
 
 import librosa
 from fastapi import FastAPI, File, HTTPException, UploadFile
+from fastapi.responses import FileResponse
 
 from src.api.predictor import Predictor
 from src.utils import load_config
+
+STATIC_DIR = Path(__file__).parent / "static"
 
 # Holds the singleton predictor; populated at startup.
 state: dict[str, Predictor] = {}
@@ -39,6 +43,12 @@ async def lifespan(app: FastAPI):
 scfg = load_config("serving")
 app = FastAPI(title=scfg["api"]["title"], lifespan=lifespan)
 MAX_BYTES = scfg["api"]["max_upload_mb"] * 1024 * 1024
+
+
+@app.get("/", include_in_schema=False)
+def index():
+    """Serve the minimal upload UI (upper = file input, lower = results)."""
+    return FileResponse(STATIC_DIR / "index.html")
 
 
 @app.get("/health")

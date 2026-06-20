@@ -130,6 +130,28 @@ curl -L -o models/panns_cnn14.pth "https://zenodo.org/record/3987831/files/Cnn14
 
 ---
 
+## Web UI & desktop app
+
+The API serves a minimal browser UI at the root (`http://127.0.0.1:8000/`): a
+single card with a drag-and-drop file picker on top and the predicted genre +
+top-3 probability bars below. No build step — it's a static page served by
+FastAPI.
+
+For a one-click, no-terminal experience there's a Windows launcher and a
+PyInstaller build:
+
+```bash
+python run_ui.py        # boots the server and opens the UI in your browser
+python build_exe.py     # → dist/MusicGenreClassifier/MusicGenreClassifier.exe
+```
+
+The packaged `.exe` bundles the light **classic SVM** only (no torch/PANNs), so
+it stays ~400 MB and starts in seconds — double-click it, or zip the folder to
+share. To serve the more accurate PANNs probe, run `run_ui.py` from the repo with
+`MGC_SERVE_KIND=embeddings` (too large to bundle sensibly).
+
+---
+
 ## Repo structure
 
 ```

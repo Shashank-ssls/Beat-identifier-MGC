@@ -35,6 +35,7 @@ __pycache__/
 .eggs/
 build/
 dist/
+*.spec
 .pytest_cache/
 .ruff_cache/
 
