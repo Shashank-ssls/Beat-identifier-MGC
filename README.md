@@ -46,6 +46,17 @@ That serves the **classic SVM** with no GPU and no large model downloads. For th
 best model (PANNs probe, **0.880**) and the full three-way benchmark, follow
 [Run it once (end to end)](#run-it-once-end-to-end) below.
 
+**Kaggle token (for step 3's auto-download).** `download_gtzan.py` pulls GTZAN
+via `kagglehub`, which needs a free Kaggle API token:
+
+1. Create a [Kaggle](https://www.kaggle.com) account → **Account → Settings → API
+   → Create New Token**. This downloads `kaggle.json`.
+2. Put it at `~/.kaggle/kaggle.json` (Windows: `%USERPROFILE%\.kaggle\kaggle.json`).
+
+No Kaggle account? Skip the script — download GTZAN manually from
+[its Kaggle page](https://www.kaggle.com/datasets/andradaolteanu/gtzan-dataset-music-genre-classification)
+and unzip the 10 genre folders into `data/genres_original/`.
+
 ---
 
 **Approaches compared**

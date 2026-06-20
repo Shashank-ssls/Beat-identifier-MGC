@@ -9,6 +9,11 @@ librosa==0.10.2.post1
 soundfile==0.12.1
 audioread==3.0.1
 
+# ── Dataset download ──────────────────────────────────────────────────
+# Used by scripts/download_gtzan.py to pull GTZAN from Kaggle (needs a free
+# Kaggle API token — see README). Not needed on Kaggle itself (attach instead).
+kagglehub==1.0.2
+
 # ── Classic ML ────────────────────────────────────────────────────────
 scikit-learn==1.5.1
 xgboost==2.1.1
