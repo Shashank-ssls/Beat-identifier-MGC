@@ -81,7 +81,8 @@ class Predictor:
             self.model = joblib.load(PROJECT_ROOT / scfg["embeddings_path"])
             self.ecfg = load_config("embeddings")["panns"]
             self._tagger = None  # lazily loaded on first request
-            self.name = "panns_logreg"
+            # Surface which probe is loaded (e.g. embeddings_logreg_tuned) in /health.
+            self.name = (PROJECT_ROOT / scfg["embeddings_path"]).stem
         else:
             raise ValueError(f"unknown model kind: {self.kind!r}")
 

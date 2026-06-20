@@ -2,16 +2,16 @@
 
 model:
   # kind = classic | cnn | embeddings
-  # Default = embeddings (PANNs CNN14 + linear probe) — the most accurate model
-  # (0.873). It loads the ~330MB checkpoint, so it's heavier to serve.
-  # The Docker image overrides this to `classic` via MGC_SERVE_KIND to stay slim.
+  # Default = embeddings (PANNs CNN14 + Optuna-tuned linear probe) — the most
+  # accurate model (0.880). It loads the ~330MB checkpoint, so it's heavier to
+  # serve. The Docker image overrides this to `classic` via MGC_SERVE_KIND.
   kind: embeddings
   name: svm            # classic: svm | xgboost   (ignored for cnn/embeddings)
   # Paths are relative to the repo root.
   classic_path: models/classic_svm.joblib
   cnn_weights: models/cnn.pt
   cnn_arch: models/cnn_arch.json
-  embeddings_path: models/embeddings_logreg.joblib
+  embeddings_path: models/embeddings_logreg_tuned.joblib
 
 inference:
   confidence_threshold: 0.45   # below this, the top label is reported "uncertain"
