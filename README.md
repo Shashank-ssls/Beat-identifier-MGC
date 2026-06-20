@@ -11,6 +11,40 @@ genres and **benchmarks three modeling approaches on the same held-out test
 set** — wrapped in a production-style MLOps loop (experiment tracking, a REST
 API, containerization, and CI).
 
+## 🚀 Run it locally
+
+> **Prerequisites:** Python 3.12 and Git — no GPU needed for this path. Nothing
+> heavy ships in the repo (the GTZAN dataset and trained models are gitignored),
+> so you download the data and train one model once: ~15 min + a ~1.2 GB download.
+
+```bash
+# 1. Get the code
+git clone https://github.com/Shashank-ssls/Beat-identifier-MGC.git
+cd Beat-identifier-MGC
+
+# 2. Environment
+python -m venv .venv
+.venv\Scripts\activate                 # macOS/Linux: source .venv/bin/activate
+pip install -r requirements.txt
+
+# 3. Get the GTZAN dataset → data/genres_original/<genre>/*.wav
+python scripts/download_gtzan.py       # needs a free Kaggle API token (~1.2 GB)
+#   ...or download GTZAN manually and unzip the 10 genre folders into data/genres_original/
+
+# 4. Build features + train the classifier  (the split manifest is already committed)
+python -m src.features.extract         # cache librosa features
+python -m src.training.train_classic   # fits the SVM + XGBoost → models/
+
+# 5. Launch the app
+python run_ui.py --classic             # opens the Beat Identifier UI at http://127.0.0.1:8000/
+```
+
+That serves the **classic SVM** with no GPU and no large model downloads. For the
+best model (PANNs probe, **0.880**) and the full three-way benchmark, follow
+[Run it once (end to end)](#run-it-once-end-to-end) below.
+
+---
+
 **Approaches compared**
 
 | | Approach | How |
