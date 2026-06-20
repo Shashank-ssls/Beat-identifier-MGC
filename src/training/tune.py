@@ -41,14 +41,14 @@ def _load(table_path, col_filter):
     df = pd.read_parquet(table_path)
     cols = [c for c in df.columns if col_filter(c)]
     tr = df[df["split"].isin(["train", "val"])]  # tune on train+val, never test
-    return tr[cols].to_numpy(), tr["label_idx"].to_numpy(), cols
+    return tr[cols].to_numpy(), tr["label_idx"].to_numpy()
 
 
 def tune_xgboost(trials: int, seed: int):
     fcfg = load_config("features")
     from src.features.classic_features import feature_names
     names = set(feature_names(fcfg["classic"]))
-    X, y, _ = _load(PROJECT_ROOT / fcfg["classic"]["cache_path"], lambda c: c in names)
+    X, y = _load(PROJECT_ROOT / fcfg["classic"]["cache_path"], names.__contains__)
     cv = StratifiedKFold(n_splits=4, shuffle=True, random_state=seed)
 
     def objective(trial):
@@ -78,7 +78,7 @@ def tune_xgboost(trials: int, seed: int):
 
 def tune_probe(trials: int, seed: int):
     ecfg = load_config("embeddings")
-    X, y, _ = _load(PROJECT_ROOT / ecfg["panns"]["cache_path"], lambda c: c.startswith("emb_"))
+    X, y = _load(PROJECT_ROOT / ecfg["panns"]["cache_path"], lambda c: c.startswith("emb_"))
     cv = StratifiedKFold(n_splits=4, shuffle=True, random_state=seed)
 
     def objective(trial):

@@ -1,15 +1,14 @@
-"""Build a standalone Windows executable for the Music Genre Classifier UI.
+"""Build a standalone Windows executable for the Beat Identifier UI.
 
 Wraps `run_ui.py` (which boots the FastAPI server + opens the browser) into a
-self-contained app under `dist/MusicGenreClassifier/`. Bundles the light classic
+self-contained app under `dist/BeatIdentifier/`. Bundles the light classic
 **SVM** model only — no torch / PANNs — so the build stays small and reliable.
 
     python build_exe.py
 
-The result is `dist/MusicGenreClassifier/MusicGenreClassifier.exe`; double-click
-it (or zip the whole folder to share). To serve the heavier PANNs probe instead,
-run `python run_ui.py` from the repo with MGC_SERVE_KIND=embeddings — that model
-is too large to bundle sensibly.
+The result is `dist/BeatIdentifier/BeatIdentifier.exe`; double-click it (or zip
+the whole folder to share). To serve the heavier PANNs probe instead, run
+`python run_ui.py` from the repo — that model is too large to bundle sensibly.
 """
 
 from __future__ import annotations
@@ -27,7 +26,7 @@ def data(src: str, dest: str) -> str:
 
 ARGS = [
     "run_ui.py",
-    "--name=MusicGenreClassifier",
+    "--name=BeatIdentifier",
     "--noconfirm",
     "--clean",
     "--console",  # keep a console so users can see the URL / close to stop

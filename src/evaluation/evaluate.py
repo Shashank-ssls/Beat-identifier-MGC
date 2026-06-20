@@ -132,9 +132,14 @@ def eval_embeddings(class_names: list[str], weights: str = "embeddings_logreg.jo
     return metrics
 
 
-def _clip_proba(table_path, cols, model):
-    """Return {clip_id: proba_vector} and {clip_id: label} for test rows."""
+def _clip_proba(table_path, col_filter, model):
+    """Return {clip_id: proba_vector} and {clip_id: label} for test rows.
+
+    `col_filter(name) -> bool` picks the feature columns, so the table is read
+    only once (no extra pass just to discover column names).
+    """
     df = pd.read_parquet(table_path)
+    cols = [c for c in df.columns if col_filter(c)]
     test = df[df["split"] == "test"]
     proba = model.predict_proba(test[cols].to_numpy())
     ids = test["clip_id"].to_numpy()
@@ -153,9 +158,9 @@ def eval_ensemble(class_names: list[str]) -> dict | None:
     if not (svm_path.exists() and emb_path.exists() and classic_tbl.exists() and emb_tbl.exists()):
         return None
 
-    svm_p, labels = _clip_proba(classic_tbl, feature_names(fcfg["classic"]), joblib.load(svm_path))
-    emb_p, _ = _clip_proba(emb_tbl, [c for c in pd.read_parquet(emb_tbl).columns
-                                     if c.startswith("emb_")], joblib.load(emb_path))
+    classic_cols = set(feature_names(fcfg["classic"]))
+    svm_p, labels = _clip_proba(classic_tbl, classic_cols.__contains__, joblib.load(svm_path))
+    emb_p, _ = _clip_proba(emb_tbl, lambda c: c.startswith("emb_"), joblib.load(emb_path))
 
     clips = [c for c in svm_p if c in emb_p]
     y_true = np.array([labels[c] for c in clips])

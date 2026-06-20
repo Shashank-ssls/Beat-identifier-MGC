@@ -1,4 +1,4 @@
-# 🎵 Music Genre Classification — Benchmark + MLOps
+# 🎵 Beat Identifier — Music Genre Classification (Benchmark + MLOps)
 
 [![CI](https://github.com/Shashank-ssls/Beat-identifier-MGC/actions/workflows/ci.yml/badge.svg)](https://github.com/Shashank-ssls/Beat-identifier-MGC/actions/workflows/ci.yml)
 ![Python](https://img.shields.io/badge/python-3.12-blue)
@@ -115,7 +115,8 @@ python -m src.training.tune --target xgboost --trials 40    # Optuna-tune XGBoos
 python -m src.evaluation.evaluate
 
 # 6. Serve it
-uvicorn src.api.app:app --reload       # → http://127.0.0.1:8000/docs  (upload a clip)
+python run_ui.py                       # → http://127.0.0.1:8000/  (Beat Identifier UI)
+# or the raw API:  uvicorn src.api.app:app --reload   → /docs
 ```
 
 \* **PANNs checkpoint (Windows):** `panns_inference` downloads via `wget`, which
@@ -141,14 +142,15 @@ For a one-click, no-terminal experience there's a Windows launcher and a
 PyInstaller build:
 
 ```bash
-python run_ui.py        # boots the server and opens the UI in your browser
-python build_exe.py     # → dist/MusicGenreClassifier/MusicGenreClassifier.exe
+python run_ui.py            # serves the PANNs probe (0.880) + opens the browser
+python run_ui.py --classic  # serve the light classic SVM instead (instant start)
+python build_exe.py         # → dist/BeatIdentifier/BeatIdentifier.exe
 ```
 
-The packaged `.exe` bundles the light **classic SVM** only (no torch/PANNs), so
-it stays ~400 MB and starts in seconds — double-click it, or zip the folder to
-share. To serve the more accurate PANNs probe, run `run_ui.py` from the repo with
-`MGC_SERVE_KIND=embeddings` (too large to bundle sensibly).
+`run_ui.py` defaults to the most accurate **PANNs probe** (the first prediction
+loads the CNN14 backbone, ~10s; subsequent ones are fast). The packaged `.exe`
+always bundles the light **classic SVM** only (no torch/PANNs), so it stays
+~400 MB and starts in seconds — double-click it, or zip the folder to share.
 
 ---
 

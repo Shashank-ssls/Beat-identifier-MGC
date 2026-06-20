@@ -20,6 +20,6 @@ inference:
   hop_seconds: 15              # ...with 50% overlap, then average the windows
 
 api:
-  title: Music Genre Classifier
+  title: Beat Identifier
   # Max upload size (MB) accepted by /predict — guards against huge files.
   max_upload_mb: 25
