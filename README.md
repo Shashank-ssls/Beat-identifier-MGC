@@ -376,3 +376,8 @@ terms.
 - **PANNs** — Kong et al., *PANNs: Large-Scale Pretrained Audio Neural Networks
   for Audio Pattern Recognition* (2020).
 - Built with PyTorch, scikit-learn, XGBoost, librosa, MLflow, and FastAPI.
+
+---
+
+**Topics:** `music-genre-classification` · `audio` · `deep-learning` · `pytorch` ·
+`fastapi` · `mlops` · `librosa` · `gtzan` · `transfer-learning` · `optuna`
