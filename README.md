@@ -80,25 +80,50 @@ loads the best model from the local registry.
 
 ---
 
-## Quickstart
+## Run it once (end to end)
 
 ```bash
-python -m venv .venv && . .venv/Scripts/activate   # (Unix: source .venv/bin/activate)
+# 0. Environment
+python -m venv .venv
+.venv\Scripts\activate                 # Unix: source .venv/bin/activate
 pip install -r requirements.txt
+# For an NVIDIA GPU, install the CUDA torch build instead of the default CPU one:
+#   pip install torch==2.3.1 --index-url https://download.pytorch.org/whl/cu121
 
-python -m src.data.split                      # reproducible split (already committed)
-python -m src.features.extract                # librosa features + mel-spectrograms
-python -m src.training.train_classic          # XGBoost + SVM  → MLflow + models/
-python -m src.training.train_cnn --device auto # CNN (uses GPU if available)
-python -m src.evaluation.evaluate             # comparison table → reports/
-uvicorn src.api.app:app --reload              # serve → http://127.0.0.1:8000/docs
+# 1. Data — get GTZAN into data/genres_original/<genre>/*.wav
+python scripts/download_gtzan.py       # needs a Kaggle API token; or copy it in manually
+python -m src.data.split               # reproducible split (manifest already committed)
+
+# 2. Features (cached to features_cache/)
+python -m src.features.extract                 # librosa table + mel-spectrograms
+python -m src.features.extract_embeddings      # PANNs CNN14 embeddings (downloads checkpoint*)
+
+# 3. Train the models  (each logs to ./mlruns and saves to ./models)
+python -m src.training.train_classic           # SVM + XGBoost (librosa features)
+python -m src.training.train_cnn --device auto  # from-scratch CNN (GPU if available)
+python -m src.training.train_embeddings        # PANNs linear probe  ← best
+
+# 4. (optional) accuracy extras
+python -m src.features.extract_segments && python -m src.training.train_classic_segmented
+python -m src.training.tune --target probe --trials 30      # Optuna-tune the probe
+python -m src.training.tune --target xgboost --trials 40    # Optuna-tune XGBoost
+
+# 5. Evaluate everything on the same test set → reports/comparison.csv
+python -m src.evaluation.evaluate
+
+# 6. Serve it
+uvicorn src.api.app:app --reload       # → http://127.0.0.1:8000/docs  (upload a clip)
 ```
 
-Optional accuracy enhancements (see Results):
+\* **PANNs checkpoint (Windows):** `panns_inference` downloads via `wget`, which
+Windows lacks. Fetch it manually once into `models/panns_cnn14.pth`:
 ```bash
-python -m src.features.extract_segments    && python -m src.training.train_classic_segmented
-python -m src.features.extract_embeddings  && python -m src.training.train_embeddings   # best, 0.873
+curl -L -o models/panns_cnn14.pth "https://zenodo.org/record/3987831/files/Cnn14_mAP%3D0.431.pth?download=1"
 ```
+(and drop `class_labels_indices.csv` into `~/panns_data/` — see the script header).
+
+> **Minimum path to a working demo:** steps 0, 1, `train_classic`, then step 6 —
+> that serves the SVM with no GPU and no PANNs download.
 
 ---
 

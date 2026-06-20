@@ -7,10 +7,15 @@ classic:
   # For each feature group we take mean + std over time → fixed-length vector.
   include:
     mfcc: true
+    delta_mfcc: true            # how MFCCs change over time (richer timbre)
     chroma: true
     spectral_contrast: true
+    spectral_centroid: true     # brightness (where spectral energy sits)
+    spectral_bandwidth: true    # spread of the spectrum
+    spectral_flatness: true     # tone-like vs noise-like
     zero_crossing_rate: true
     spectral_rolloff: true
+    rms: true                   # loudness envelope
     tempo: true
   cache_path: features_cache/classic_features.parquet
   # 3-second segmentation: split each 30s clip into non-overlapping windows →

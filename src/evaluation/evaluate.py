@@ -105,9 +105,10 @@ def eval_segmented(class_names: list[str]) -> dict | None:
     return metrics
 
 
-def eval_embeddings(class_names: list[str]) -> dict | None:
-    """Evaluate the PANNs-embedding linear probe (one embedding per clip)."""
-    path = MODELS_DIR / "embeddings_logreg.joblib"
+def eval_embeddings(class_names: list[str], weights: str = "embeddings_logreg.joblib",
+                    cm_name: str = "cm_panns_logreg.png") -> dict | None:
+    """Evaluate a PANNs-embedding classifier (one embedding per clip)."""
+    path = MODELS_DIR / weights
     table = PROJECT_ROOT / load_config("embeddings")["panns"]["cache_path"]
     if not (path.exists() and table.exists()):
         return None
@@ -126,8 +127,43 @@ def eval_embeddings(class_names: list[str]) -> dict | None:
     for i in range(len(X)):
         model.predict(X[i : i + 1])
     metrics["latency_ms"] = (time.perf_counter() - t0) / len(X) * 1000
-    save_confusion_matrix(y, y_pred, class_names, REPORTS_DIR / "cm_panns_logreg.png",
-                          title="PANNs + logreg — test confusion matrix")
+    save_confusion_matrix(y, y_pred, class_names, REPORTS_DIR / cm_name,
+                          title=f"{weights} — test confusion matrix")
+    return metrics
+
+
+def _clip_proba(table_path, cols, model):
+    """Return {clip_id: proba_vector} and {clip_id: label} for test rows."""
+    df = pd.read_parquet(table_path)
+    test = df[df["split"] == "test"]
+    proba = model.predict_proba(test[cols].to_numpy())
+    ids = test["clip_id"].to_numpy()
+    labels = test["label_idx"].to_numpy()
+    return ({cid: proba[i] for i, cid in enumerate(ids)},
+            {cid: labels[i] for i, cid in enumerate(ids)})
+
+
+def eval_ensemble(class_names: list[str]) -> dict | None:
+    """Soft-vote ensemble of the SVM (librosa) and PANNs probe, per clip."""
+    svm_path = MODELS_DIR / "classic_svm.joblib"
+    emb_path = MODELS_DIR / "embeddings_logreg.joblib"
+    fcfg, ecfg = load_config("features"), load_config("embeddings")
+    classic_tbl = PROJECT_ROOT / fcfg["classic"]["cache_path"]
+    emb_tbl = PROJECT_ROOT / ecfg["panns"]["cache_path"]
+    if not (svm_path.exists() and emb_path.exists() and classic_tbl.exists() and emb_tbl.exists()):
+        return None
+
+    svm_p, labels = _clip_proba(classic_tbl, feature_names(fcfg["classic"]), joblib.load(svm_path))
+    emb_p, _ = _clip_proba(emb_tbl, [c for c in pd.read_parquet(emb_tbl).columns
+                                     if c.startswith("emb_")], joblib.load(emb_path))
+
+    clips = [c for c in svm_p if c in emb_p]
+    y_true = np.array([labels[c] for c in clips])
+    y_pred = np.array([np.argmax((svm_p[c] + emb_p[c]) / 2) for c in clips])
+    metrics = compute_metrics(y_true, y_pred, class_names)
+    metrics["latency_ms"] = float("nan")  # sum of two models' costs; not measured
+    save_confusion_matrix(y_true, y_pred, class_names, REPORTS_DIR / "cm_ensemble.png",
+                          title="Ensemble (SVM + PANNs) — test confusion matrix")
     return metrics
 
 
@@ -196,12 +232,23 @@ def main() -> None:
         m = eval_classic(name, class_names)
         if m:
             results[name] = m
+    # tuned XGBoost (Optuna), if present
+    xgb_tuned = eval_classic("xgboost_tuned", class_names)
+    if xgb_tuned:
+        results["xgboost_tuned"] = xgb_tuned
     seg = eval_segmented(class_names)
     if seg:
         results["svm_3s"] = seg
     emb = eval_embeddings(class_names)
     if emb:
         results["panns_logreg"] = emb
+    emb_tuned = eval_embeddings(class_names, "embeddings_logreg_tuned.joblib",
+                                "cm_panns_logreg_tuned.png")
+    if emb_tuned:
+        results["panns_logreg_tuned"] = emb_tuned
+    ens = eval_ensemble(class_names)
+    if ens:
+        results["ensemble_svm_panns"] = ens
     cnn = eval_cnn(class_names)
     if cnn:
         results["cnn"] = cnn
