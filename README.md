@@ -23,13 +23,16 @@ API, containerization, and CI).
 
 | Model | Accuracy | Macro-F1 |
 |---|---|---|
-| ⭐ **PANNs CNN14 embeddings + linear probe** | **0.873** | **0.873** |
-| SVM (RBF) on librosa features | 0.807 | 0.807 |
-| XGBoost | 0.713 | 0.714 |
+| ⭐ **PANNs CNN14 embeddings + tuned probe** | **0.880** | **0.879** |
+| PANNs embeddings + linear probe | 0.873 | 0.873 |
+| Ensemble (SVM + PANNs, soft-vote) | 0.867 | 0.867 |
+| XGBoost (Optuna-tuned) | 0.820 | 0.821 |
+| SVM (RBF) on librosa features | 0.780 | 0.782 |
 | CNN (from scratch) | 0.693 | 0.668 |
 
 **Headline takeaways**
 - 📈 **Transfer learning wins** — pretrained audio embeddings beat both hand-crafted features and a from-scratch CNN on a small dataset.
+- 🎛️ **Tuning pays off where it can** — Optuna lifts the probe to **0.880** and XGBoost from 0.74 → 0.82; the soft-vote ensemble lands between the probe and the classics.
 - 🧪 **The from-scratch CNN loses to a plain SVM** — with only ~700 training clips, "deep learning" is not automatically better.
 - 🕵️ **Honest evaluation** — track-grouped splits show the famous "~90% on GTZAN" results are largely a **data-leakage artifact**.
 
@@ -263,11 +266,14 @@ Held-out **test set** (150 clips), ranked by macro-F1:
 
 | Model | Test accuracy | Test macro-F1 | Classifier latency (ms/clip) |
 |---|---|---|---|
-| **PANNs CNN14 embeddings + linear probe** | **0.873** | **0.873** | 0.27* |
-| SVM — 3s segments + tuned (GroupKFold) | 0.813 | 0.813 | 6.5 |
-| SVM (RBF), 30s | 0.807 | 0.807 | 0.24 |
-| XGBoost | 0.713 | 0.714 | 1.03 |
-| CNN (from-scratch, GTX 1650) | 0.693 | 0.668 | 22.1 |
+| **PANNs CNN14 embeddings + Optuna-tuned probe** | **0.880** | **0.879** | 0.19* |
+| PANNs CNN14 embeddings + linear probe | 0.873 | 0.873 | 0.20* |
+| Ensemble — SVM + PANNs probe (soft-vote) | 0.867 | 0.867 | — |
+| XGBoost (Optuna-tuned, 30s) | 0.820 | 0.821 | 1.40 |
+| SVM — 3s segments + tuned (GroupKFold) | 0.800 | 0.802 | 7.24 |
+| SVM (RBF), 30s | 0.780 | 0.782 | 0.23 |
+| XGBoost (30s) | 0.740 | 0.741 | 1.00 |
+| CNN (from-scratch, GTX 1650) | 0.693 | 0.668 | 18.4 |
 
 \* The probe itself is sub-ms, but the PANNs model serves only *after* a CNN14
 forward pass to produce the embedding (~tens of ms on CPU) — so its real
@@ -276,18 +282,26 @@ trade-off.
 
 **Finding 1 — transfer learning wins; from-scratch CNN loses.** A linear probe
 on frozen **PANNs CNN14** embeddings (pretrained on AudioSet) tops the board at
-**0.873** — the only thing that breaks past the hand-feature ceiling. Meanwhile
-the *from-scratch* CNN (0.693) loses to even the hand-feature SVM (0.807):
-with ~700 training clips a small CNN can't out-learn hand features, but a model
-pretrained on millions of clips can. That contrast is the core lesson — *when
-you have little data, borrow features from a big pretrained model.*
+**0.880** once Optuna tunes its regularisation (**0.873** untuned) — the only
+thing that breaks past the hand-feature ceiling. Meanwhile the *from-scratch*
+CNN (0.693) loses to even the hand-feature SVM (0.780): with ~700 training clips
+a small CNN can't out-learn hand features, but a model pretrained on millions of
+clips can. That contrast is the core lesson — *when you have little data, borrow
+features from a big pretrained model.*
 
-**Finding 2 — "3-second segmentation" gives no real gain when done without
+**Finding 2 — tuning helps the classics, an ensemble doesn't beat the best single
+model.** Optuna lifts XGBoost from 0.74 → **0.82** (richer librosa features +
+searched depth/learning-rate), closing most of the gap to the embeddings. But a
+soft-vote **ensemble** of the SVM and the PANNs probe (0.867) lands *below* the
+probe alone — the SVM's errors aren't independent enough to add signal, so
+averaging just pulls the strong model toward the weak one.
+
+**Finding 3 — "3-second segmentation" gives no real gain when done without
 leakage.** Splitting each clip into 3s windows (~10x rows) + soft-voting is the
 classic trick behind the ~90% GTZAN figures online — but those use a *random*
 segment split that leaks segments of the same recording across train/test. With
-a **track-grouped** split + GroupKFold tuning, the honest gain is ~0 (0.807 →
-0.813): voting over segments ≈ averaging features over the full clip. The
+a **track-grouped** split + GroupKFold tuning, the honest gain is ~0 (0.780 →
+0.800): voting over segments ≈ averaging features over the full clip. The
 inflated 90% is largely a leakage artifact.
 
 Full per-class F1 table: `reports/comparison.csv`; analysis in
@@ -296,8 +310,9 @@ Full per-class F1 table: `reports/comparison.csv`; analysis in
 Reproduce: `python -m src.training.train_classic`,
 `python -m src.features.extract_segments && python -m src.training.train_classic_segmented`,
 `python -m src.features.extract_embeddings && python -m src.training.train_embeddings`,
-and `python -m src.training.train_cnn --device cuda` (all log to `./mlruns`; view
-with `mlflow ui --backend-store-uri ./mlruns`).
+`python -m src.training.train_cnn --device cuda`, then tune the tabular models with
+`python -m src.training.tune --target xgboost --trials 40` and `--target probe --trials 30`
+(all log to `./mlruns`; view with `mlflow ui --backend-store-uri ./mlruns`).
 
 ---
 
