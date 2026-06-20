@@ -133,6 +133,10 @@ curl -L -o models/panns_cnn14.pth "https://zenodo.org/record/3987831/files/Cnn14
 
 ## Web UI & desktop app
 
+<p align="center">
+  <img src="assets/ui-screenshot.png" alt="Beat Identifier UI — predicting a clip's genre" width="380">
+</p>
+
 The API serves a minimal browser UI at the root (`http://127.0.0.1:8000/`): a
 single card with a drag-and-drop file picker on top and the predicted genre +
 top-3 probability bars below. No build step — it's a static page served by
