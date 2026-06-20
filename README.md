@@ -13,17 +13,20 @@ API, containerization, and CI).
 
 ## 🚀 Run it locally
 
-> **Prerequisites:** Python 3.12 and Git — no GPU needed for this path. Nothing
-> heavy ships in the repo (the GTZAN dataset and trained models are gitignored),
-> so you download the data and train one model once: ~15 min + a ~1.2 GB download.
+> **Prerequisites:** **Python 3.12** and Git — no GPU needed for this path.
+> Use 3.12 specifically: the pinned `torch==2.3.1` has no wheels for 3.13+, so
+> newer Pythons will fail to install. Nothing heavy ships in the repo (the GTZAN
+> dataset and trained models are gitignored), so you download the data and train
+> one model once: ~15 min + a ~1.2 GB download.
 
 ```bash
 # 1. Get the code
 git clone https://github.com/Shashank-ssls/Beat-identifier-MGC.git
 cd Beat-identifier-MGC
 
-# 2. Environment
-python -m venv .venv
+# 2. Environment — the venv MUST use Python 3.12
+py -3.12 -m venv .venv                  # Windows; macOS/Linux: python3.12 -m venv .venv
+#   no 3.12 on your machine? use uv:  uv venv --python 3.12 .venv
 .venv\Scripts\activate                 # macOS/Linux: source .venv/bin/activate
 pip install -r requirements.txt
 
